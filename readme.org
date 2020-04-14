@@ -1,0 +1,46 @@
+#+TITLE: marcos_client
+
+Python-based MaRCoS GUI and associated tests.
+
+* Setup guide
+
+  - Install =msgpack= for Python manually or via the package manager of your choice.
+
+  - Clone the repo and copy =local_config.py.example= to =local_config.py=.
+  
+  - Edit =local_config.py= to suit your network setup.
+
+  - Run =test_client.py= and make sure no errors are returned.
+
+  - Run =marcos.py= for the GUI.
+
+* Client-server protocol (work-in-progress)
+
+  The communication between client and server uses the =msgpack= protocol.
+  On the server it relies on the [[https://github.com/ludocode/mpack][MPack]] C library, on the client it uses Python [[https://pypi.org/project/msgpack/][msgpack]] (NOT python-msgpack).
+
+** Packet structure
+
+   Each packet consists of an array of disparate elements (or a Python list) as follows:
+
+   | Index | Element                            | Purpose                                                                                                                               |
+   |-------+------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------|
+   |     0 | message type (unsigned)            | identify the message source and purpose                                                                                               |
+   |     1 | packet index (unsigned)            | keep track of the number of packets arriving, and whether any packets have been dropped etc                                           |
+   |     2 | unused (unsigned)                  | perhaps the size? Reserved for later use                                                                                              |
+   |     3 | version (unsigned)                 | 3 bytes (major, minor, debug) with bitmaps of ff0000, ff00 and ff within an unsigned int. [TODO: shift to chars to avoid bitbanging?] |
+   |     4 | [TODO: map with data]              |                                                                                                                                       |
+   |     5 | [TODO: map with arrays of strings] | Info, warnings and errors (primarily for the server to reply with)                                                                    |
+
+*** Message types
+
+    | Number | Source | Meaning                                                                                                      |
+    |--------+--------+--------------------------------------------------------------------------------------------------------------|
+    |      0 | client | request, normal conditions; i.e. a command to carry out something standard                                   |
+    |      1 | client | emergency stop, tries to halt whatever the server is currently attempting                                    |
+    |    128 | server | reply, normal conditions; i.e. a reply to a request, containing data in most cases as well as infos/warnings |
+    |    129 | server | reply, error conditions; describing error state                                                              |
+
+** Data format
+   
+   [TODO: explain map with data in Index 4]
