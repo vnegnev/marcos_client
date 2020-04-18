@@ -34,12 +34,13 @@ Python-based MaRCoS GUI and associated tests.
 
 *** Message types
 
-    | Number | Source | Meaning                                                                                                      |
-    |--------+--------+--------------------------------------------------------------------------------------------------------------|
-    |      0 | client | request, normal conditions; i.e. a command to carry out something standard                                   |
-    |      1 | client | emergency stop, tries to halt whatever the server is currently attempting                                    |
-    |    128 | server | reply, normal conditions; i.e. a reply to a request, containing data in most cases as well as infos/warnings |
-    |    129 | server | reply, error conditions; describing error state                                                              |
+    | Number | Source | Meaning                                                                                                             |
+    |--------+--------+---------------------------------------------------------------------------------------------------------------------|
+    |      0 | client | request, normal conditions; i.e. a command to carry out something standard                                          |
+    |      1 | client | emergency stop, tries to halt whatever the server is currently attempting                                           |
+    |      2 | client | exit server, shuts the server down gracefully                                                                       |
+    |    128 | server | reply, normal conditions; i.e. a reply to a request, containing data in most cases as well as infos/warnings/errors |
+    |    129 | server | reply, error conditions; describing error state                                                                     |
 
 ** Data format
    
