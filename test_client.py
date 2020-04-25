@@ -10,7 +10,7 @@ from local_config import ip_address, port
 
 version_major = 0
 version_minor = 0
-version_debug = 1
+version_debug = 2
 
 request = 0
 emergency_stop = 1
@@ -20,7 +20,7 @@ def construct_packet(data, packet_idx=0, command=request):
     assert version_major < 256 and version_minor < 256 and version_debug < 256, "Version is too high for a byte!"
     version = (version_major << 16) | (version_minor << 8) | version_debug
     fields = [command, packet_idx, 0, version, data]
-    return msgpack.packb(fields)
+    return fields
 
 def process(payload, print_all=False):
     # data = msgpack.unpackb(raw_reply, use_list=False, max_array_len=1024*1024)
@@ -28,7 +28,7 @@ def process(payload, print_all=False):
 
     if print_all:
         print("")
-
+        
         status = payload[5]
 
         try:
@@ -54,7 +54,7 @@ def process(payload, print_all=False):
 
     try:
         print("Last elements of returned unsigned arrays: {:f}, {:f}".format(
-            payload[4]['array1'][-1], payload[4]['array2'][-1]))
+            payload[4]['test_throughput']['array1'][-1], payload[4]['test_throughput']['array2'][-1]))
     except KeyError:
         print("Reply data: ")
         print(reply_data)
@@ -72,28 +72,40 @@ def send_msg(msg, socket):
         for o in unpacker: # ugly way of doing it
             return o # quit function after 1st reply (could make this a thread in the future)
 
-def sock_test():
+def throughput_test(s):
+    packet_idx = 0
+
+    for k in range(7):
+        msg = msgpack.packb(construct_packet({'test_throughput': 10**k}))
+
+        process(send_msg(msg, s))
+        packet_idx += 2
+
+def random_test(s):
+    # Random other packet
+    process(send_msg(msgpack.packb(construct_packet({'boo': 3}) , s)))
+        
+def shutdown_server(s):
+    msg = msgpack.packb(construct_packet( {}, 0, command=close_server))
+    process(send_msg(msg, s), print_all=True)    
+    
+def test_client(s):
+    packet_idx = 0
+    pkt = construct_packet( {
+        'configure_hw': {
+            'fpga_clk_word1': 0x1,
+            'fpga_clk_word2': 0x2
+            # 'fpga_clk_word3': 0x3,
+        },
+    }, packet_idx)
+    process(send_msg(msgpack.packb(pkt), s), print_all=True)
+
+def main_test():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect((ip_address, port))
-        packet_idx = 0
-
-        for k in range(7):
-            msg = construct_packet( {
-                'test_length': 10**k,
-                'test1':[1,2,3,4,5,6,7,8],
-                'test2':{'oogabooga':[4,5,6,7]} })
-
-            process(send_msg(msg, s))
-            packet_idx += 2
-
-        # Random other packet
-        process(send_msg(construct_packet({'boo': 3}) , s))
-
-        # Close server
-        msg = construct_packet( {}, packet_idx, command=close_server)
-        process(send_msg(msg, s), print_all=True)
-
-    #print(repr(data))
-
+        # throughput_test(s)
+        test_client(s)
+        # shutdown_server(s)
+    
 if __name__ == "__main__":
-    sock_test()
+    main_test()
