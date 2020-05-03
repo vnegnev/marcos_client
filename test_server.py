@@ -74,7 +74,7 @@ def send_packet(packet, socket):
         for o in unpacker: # ugly way of doing it
             return o # quit function after 1st reply (could make this a thread in the future)
 
-class ServerConfigTest(unittest.TestCase):
+class ServerTest(unittest.TestCase):
 
     # @classmethod
     # def setUpClass(cls):
@@ -170,6 +170,24 @@ class ServerConfigTest(unittest.TestCase):
                            'warnings': ['TX divider outside the range [1, 1000]; make sure this is what you want',
                                         'recomp_pul requested but set to false; doing nothing'],
                            'infos': ['true RX freq: 13.440000 MHz', 'TX sample duration: 813.802083 us', 'true RF amp: 0.152590']}])
+
+    def test_gradient_offsets(self):
+        commands = ( 'grad_offs_x', 'grad_offs_y', 'grad_offs_z', 'grad_offs_z2' )
+        packet = construct_packet({commands[0]: -60000,
+                                   commands[1]: 60000,
+                                   commands[2]: 12345})
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'grad_offs_x': 0, 'grad_offs_y': 0, 'grad_offs_z': 0},
+                          {}])
+
+    def test_acquire(self):
+        samples = 10
+        packet = construct_packet({'acq': samples})
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply[:4], [reply_pkt, 1, 0, version_full])
+        self.assertEqual(len(reply[4]['acq']), samples*8)
 
     @unittest.skip("rewrite needed")
     def test_bad_packet_format(self):
