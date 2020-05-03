@@ -1,78 +1,13 @@
 #!/usr/bin/env python3
 import socket, time, unittest
-import msgpack
+import numpy as np
+import matplotlib.pyplot as plt
 
 import pdb
 st = pdb.set_trace
 
 from local_config import ip_address, port
-
-version_major = 0
-version_minor = 0
-version_debug = 5
-version_full = (version_major << 16) | (version_minor << 8) | version_debug
-
-request_pkt = 0
-emergency_stop_pkt = 1
-close_server_pkt = 2
-reply_pkt = 128
-
-def construct_packet(data, packet_idx=0, command=request_pkt, version=(version_major, version_minor, version_debug)):
-    vma, vmi, vd = version
-    assert vma < 256 and vmi < 256 and vd < 256, "Version is too high for a byte!"
-    version = (vma << 16) | (vmi << 8) | vd
-    fields = [command, packet_idx, 0, version, data]
-    return fields
-
-def process(payload, print_all=False):
-    # data = msgpack.unpackb(raw_reply, use_list=False, max_array_len=1024*1024)
-    reply_data = payload[4]
-
-    if print_all:
-        print("")
-        
-        status = payload[5]
-
-        try:
-            print("Errors:")
-            for k in status['errors']:
-                print(k)
-        except KeyError:
-            pass
-
-        try:
-            print("Warnings:")
-            for k in status['warnings']:
-                print(k)
-        except KeyError:
-            pass
-
-        try:
-            print("Infos:")
-            for k in status['infos']:
-                print(k)
-        except KeyError:
-            pass
-
-    try:
-        print("Last elements of returned unsigned arrays: {:f}, {:f}".format(
-            payload[4]['test_throughput']['array1'][-1], payload[4]['test_throughput']['array2'][-1]))
-    except KeyError:
-        print("Reply data: ")
-        print(reply_data)
-
-def send_packet(packet, socket):
-    socket.sendall(msgpack.packb(packet))
-
-    unpacker = msgpack.Unpacker()
-    packet_done = False
-    while not packet_done:
-        buf = socket.recv(1024)
-        if not buf:
-            break
-        unpacker.feed(buf)
-        for o in unpacker: # ugly way of doing it
-            return o # quit function after 1st reply (could make this a thread in the future)
+from server_comms import *
 
 class ServerTest(unittest.TestCase):
 
@@ -183,11 +118,17 @@ class ServerTest(unittest.TestCase):
                           {}])
 
     def test_acquire(self):
-        samples = 10
+        samples = 1000000
         packet = construct_packet({'acq': samples})
         reply = send_packet(packet, self.s)
+        acquired_data_raw = reply[4]['acq']
+        data = np.frombuffer(acquired_data_raw, np.complex64)
+
+        plt.plot(np.abs(data));plt.show()
+        
         self.assertEqual(reply[:4], [reply_pkt, 1, 0, version_full])
-        self.assertEqual(len(reply[4]['acq']), samples*8)
+        self.assertEqual(len(acquired_data_raw), samples*8)
+        # st()
 
     @unittest.skip("rewrite needed")
     def test_bad_packet_format(self):
