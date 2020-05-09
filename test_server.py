@@ -27,7 +27,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1},
                           {'errors': ['not all client commands were understood'],
-                           'infos': ['Client version 0.0.0 differs slightly from server version 0.0.5']}])
+                           'infos': ['Client version 0.0.0 differs slightly from server version 0.0.6']}])
 
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
@@ -76,13 +76,16 @@ class ServerTest(unittest.TestCase):
         packet = construct_packet({'rx_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
                                    'rf_amp': 8000,
+                                   'rx_rate': 250,
+                                   'tx_size': 250,
                                    'tx_samples': 40,
                                    'recomp_pul': True,
-                                   'raw_tx_data': b"0123456789abcdef"*4096})
+                                   'raw_tx_data': b"0123456789abcdef"*4096
+        })
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'rx_freq': 0, 'tx_div': 0, 'rf_amp': 0, 'tx_samples': 0, 'recomp_pul': 0, 'raw_tx_data': 0},
+                          {'rx_freq': 0, 'tx_div': 0, 'rf_amp': 0, 'rx_rate': 0, 'tx_size': 0, 'tx_samples': 0, 'recomp_pul': 0, 'raw_tx_data': 0},
                           {'infos': [
                               'true RX freq: 13.440000 MHz',
                               'TX sample duration: 0.081380 us',
@@ -91,20 +94,38 @@ class ServerTest(unittest.TestCase):
         )
 
     def test_several_some_bad(self):
+        # first, send a normal packet to ensure everything's in a known state
+        packetp = construct_packet({'rx_freq': 0x7000000, # floats instead of uints
+                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
+                                    'rf_amp': 8000,
+                                    'rx_rate': 250,
+                                    'tx_size': 250,                                    
+                                    'tx_samples': 40,
+                                    'recomp_pul': True,
+                                    'raw_tx_data': b"0123456789abcdef"*4096
+        })
+        send_packet(packetp, self.s)        
+
+        # Now, try sending with some issues
         packet = construct_packet({'rx_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 100000, # 813.8us sampling for 122.88 clock freq
                                    'rf_amp': 100, # TODO: make a test where this is too large
+                                   'rx_rate': 32767,
+                                   'tx_size': 65535,
                                    'tx_samples': 40,
                                    'recomp_pul': False,
                                    'raw_tx_data': b"0123456789abcdef"*4097})
         reply = send_packet(packet, self.s)
+        # st()
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'rx_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
-                          {'errors': ['too much raw TX data'],
-                           'warnings': ['TX divider outside the range [1, 1000]; make sure this is what you want',
+                          {'rx_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'rx_rate': -1, 'tx_size': -1, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
+                          {'errors': ['RX rate outside the range [25, 8192]; check your settings',
+                                      'TX size outside the range [1, 32767]; check your settings',
+                                      'too much raw TX data'],
+                           'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
                                         'recomp_pul requested but set to false; doing nothing'],
-                           'infos': ['true RX freq: 13.440000 MHz', 'TX sample duration: 813.802083 us', 'true RF amp: 0.152590']}])
+                           'infos': ['true RX freq: 13.440000 MHz', 'TX sample duration: 0.081380 us', 'true RF amp: 0.152590']}])
 
     def test_gradient_offsets(self):
         commands = ( 'grad_offs_x', 'grad_offs_y', 'grad_offs_z', 'grad_offs_z2' )
@@ -117,18 +138,21 @@ class ServerTest(unittest.TestCase):
                           {'grad_offs_x': 0, 'grad_offs_y': 0, 'grad_offs_z': 0},
                           {}])
 
-    def test_acquire(self):
-        samples = 1000000
+    def test_acquire_simple(self):
+        # For comprehensive test, see test_acquire.py
+        samples = 10
         packet = construct_packet({'acq': samples})
         reply = send_packet(packet, self.s)
         acquired_data_raw = reply[4]['acq']
         data = np.frombuffer(acquired_data_raw, np.complex64)
 
-        plt.plot(np.abs(data));plt.show()
-        
         self.assertEqual(reply[:4], [reply_pkt, 1, 0, version_full])
-        self.assertEqual(len(acquired_data_raw), samples*8)
-        # st()
+        self.assertEqual(len(acquired_data_raw), samples*8)        
+        self.assertIs(type(data), np.ndarray)
+        self.assertEqual(data.size, samples)
+
+        if False:
+            plt.plot(np.abs(data));plt.show()        
 
     @unittest.skip("rewrite needed")
     def test_bad_packet_format(self):
@@ -141,6 +165,13 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(reply_packet,
                          [reply, 1, 0, version_full, {'configure_hw': 3}, {}]
         )
+
+    @unittest.skip("should only be executed manually")
+    def test_exit(self):
+        packet = construct_packet( {}, 0, command=close_server_pkt)
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full, {}, {'infos': ['Shutting down server.']}])
 
 def throughput_test(s):
     packet_idx = 0
