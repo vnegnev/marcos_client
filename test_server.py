@@ -22,12 +22,27 @@ class ServerTest(unittest.TestCase):
         self.s.close()
 
     def test_version(self):
-        packet = construct_packet({'asdfasdf':1}, self.packet_idx, version=(0,0,0))
-        reply = send_packet(packet, self.s)
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1},
-                          {'errors': ['not all client commands were understood'],
-                           'infos': ['Client version 0.0.0 differs slightly from server version 0.0.6']}])
+        versions = [ (0,0,0), (0,0,6), (0,1,100), (0,1,255), (1,5,7), (255,255,255) ]
+        statuses = [
+            {'infos': ['Client version 0.0.0 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+             'errors': ['not all client commands were understood']},
+            {'infos': ['Client version 0.0.6 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+             'errors': ['not all client commands were understood']},
+            {'warnings': ['Client version 0.1.100 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+             'errors': ['not all client commands were understood']},
+            {'warnings': ['Client version 0.1.255 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+             'errors': ['not all client commands were understood']},
+            {'errors': ['Client version 1.5.7 significantly different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug),
+                        'not all client commands were understood']},
+            {'errors': ['Client version 255.255.255 significantly different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug),
+                        'not all client commands were understood']}
+        ]
+        
+        for v, ss in zip(versions, statuses):
+            packet = construct_packet({'asdfasdf':1}, self.packet_idx, version=v)
+            reply = send_packet(packet, self.s)
+            self.assertEqual(reply,
+                             [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1}, ss])
 
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
@@ -138,6 +153,45 @@ class ServerTest(unittest.TestCase):
                           {'grad_offs_x': 0, 'grad_offs_y': 0, 'grad_offs_z': 0},
                           {}])
 
+    def test_gradient_mem(self):
+        channels = ( 'x', 'y', 'z')
+        grad_mem_bytes = 2 * 4096
+
+        # everything should be fine
+        for k, c in enumerate(channels):
+            raw_data = bytearray(grad_mem_bytes)
+            for m in range(grad_mem_bytes):
+                raw_data[m] = k + 10; # i.e. it'll be filled with 'a', 'b', 'c', ...
+            packet = construct_packet({'grad_mem_{:s}'.format(c) : raw_data})
+            reply = send_packet(packet, self.s)
+            self.assertEqual(reply,
+                             [reply_pkt, 1, 0, version_full,
+                              {'grad_mem_{:s}'.format(c): 0},
+                              {'infos': ['gradient mem {:s} data bytes copied: {:d}'.format(c, grad_mem_bytes)] }
+                              ])
+
+        # a bit too much data
+        for k, c in enumerate(channels):
+            raw_data = bytearray(grad_mem_bytes + 1)
+            for m in range(grad_mem_bytes + 1):
+                raw_data[m] = k + 10; # i.e. it'll be filled with 'a', 'b', 'c', ...
+            packet = construct_packet({'grad_mem_{:s}'.format(c) : raw_data})
+            reply = send_packet(packet, self.s)
+            self.assertEqual(reply,
+                             [reply_pkt, 1, 0, version_full,
+                              {'grad_mem_{:s}'.format(c): -1},
+                              {'errors': ['too much grad mem {:s} data: {:d} bytes > {:d}'.format(c, grad_mem_bytes + 1, grad_mem_bytes)] }
+                             ])
+
+        # ensure that Z2 is not yet implemented
+        packet = construct_packet({'grad_mem_z2' : raw_data})
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'grad_mem_z2': -1},
+                          {'errors': ['grad_mem_z2 not yet implemented'] }
+                         ])
+
     def test_acquire_simple(self):
         # For comprehensive test, see test_acquire.py
         samples = 10
@@ -152,7 +206,7 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(data.size, samples)
 
         if False:
-            plt.plot(np.abs(data));plt.show()        
+            plt.plot(np.abs(data));plt.show()
 
     @unittest.skip("rewrite needed")
     def test_bad_packet_format(self):
