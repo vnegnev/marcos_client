@@ -27,10 +27,10 @@ class AcquireTest(unittest.TestCase):
 
     def test_acquire(self):
         # Top-level parameters
-        rx_freq = 10 # LO frequency, MHz
+        rx_freq = 2 # LO frequency, MHz
         samples = 800 # number of samples to acquire
         divisor = 2 # TX sampling rate divisor, i.e. 3 means TX samples are output at 1/3 of the rate of the FPGA clock. Minimum value is 2
-        sampling_divisor = 50 # as above, I think (+/- 1 error)
+        sampling_divisor = 123 # as above, I think (+/- 1 error); 123 means it'll be around 1 sample per us
         
         sample_period_us = 1/fpga_clk_freq_MHz # 1 / RP clock freq
         rx_sample_period = sample_period_us * sampling_divisor * 2 # not sure where the 2x comes from
@@ -43,7 +43,7 @@ class AcquireTest(unittest.TestCase):
         values = tx_bytes // 4
         xaxis = np.linspace(0, 1, values) * sample_period_us * divisor * values # in units of microseconds
         tx_arg = 2 * np.pi * xaxis * tx_iq_freq
-        if True:
+        if False:
             # sinewaves, for loopback testing
             tx_i = np.round(rf_amp * np.cos(tx_arg) ).astype(np.ushort) # note signed -> unsigned for binary maths!
             tx_q = np.round(rf_amp * np.sin(tx_arg) ).astype(np.ushort)
@@ -66,8 +66,8 @@ class AcquireTest(unittest.TestCase):
         # compute pulse sequence
         from ocra_lib.assembler import Assembler
         ass = Assembler()
-        # sequence_byte_array = ass.assemble("ocra_lib/se_default_vn.txt") # no samples appear since no acquisition takes place
-        sequence_byte_array = ass.assemble("ocra_lib/se_default_vn.txt")            
+        sequence_byte_array = ass.assemble("ocra_lib/se_default_vn.txt") # no samples appear since no acquisition takes place
+        # sequence_byte_array = ass.assemble("ocra_lib/se_default.txt")        
         
         packet = construct_packet({# 'rx_freq': 0x8000000,
             'rx_freq': int(np.round(rx_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf,
@@ -89,11 +89,12 @@ class AcquireTest(unittest.TestCase):
                     print(k)
             except KeyError:
                 pass
+
         acquired_data_raw = reply[4]['acq']
         data = np.frombuffer(acquired_data_raw, np.complex64)
         # data = np.frombuffer(acquired_data_raw, np.uint64) # ONLY FOR DEBUGGING THE FIFO COUNT
 
-        if True:
+        if False:
                 # mkr = '-'
                 mkr = '.'
                 fig, axs = plt.subplots(2,1)
@@ -109,15 +110,100 @@ class AcquireTest(unittest.TestCase):
                 print('max power at {:.3f} +/- {:.3f} MHz'.format(f_axis[np.argmax(spectrum)], f_axis[11]-f_axis[10]))
                 for ax in axs:
                     ax.grid(True)
-                plt.show()
+                # plt.show()
 
-        if False:
-            # receive some data repeatedly after the server's been configured
-            packet = construct_packet({'acq': samples})
-            for k in range(3):
+        if True:
+            raw_grad_data = bytearray(4096 * 2)
+            
+            for k in range(100):
+
+                # # OLD, but needed to initialise the DACs somehow
+                # val = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4) ;
+                # val2 = 0x00200002;
+
+                # raw_grad_data[0] = val & 0xff;
+                # raw_grad_data[1] = (val >> 8) & 0xff;
+                # raw_grad_data[2] = (val >> 16) & 0xff;
+                # raw_grad_data[3] = (val >> 24) & 0xff;
+                
+                # raw_grad_data[4] = val2 & 0xff;
+                # raw_grad_data[5] = (val2 >> 8) & 0xff;
+                # raw_grad_data[6] = (val2 >> 16) & 0xff;
+                # raw_grad_data[7] = (val2 >> 24) & 0xff;
+
+                # Ramp from min. to max. voltage
+                ramp_samples = 90
+                ramp = np.linspace(-1, 1, ramp_samples) # between -1 and 1, which are the DAC output full-scale limits (NOT voltage)
+                ramp[0] = 1 # peak at the start
+
+                # Sine wave
+                sine_samples = 200
+                cycles = 5
+                sine_arg = np.linspace(0, 2*np.pi*cycles, sine_samples) 
+                sine = np.sin(sine_arg) * np.exp(-sine_arg/10)
+
+                # Concatenate
+                dac_waveform = np.hstack([ramp, sine])
+                
+                # np.ushort: actually it needs to be a 16-bit 2's
+                # complement signed int, but Python tracks the sign
+                # independently from the value which complicates the
+                # bitwise arithmetic in the for loop below
+                dac_data = np.round(dac_waveform * 32767).astype(np.ushort)
+                for k, r in enumerate(dac_data): # 8192//4):
+                    assert k < 8192//4, "Too much data for the gradient RAM"
+                    n = 4 * k
+                    val = 0x00100000 | (r << 4) ;
+                    raw_grad_data[n] = val & 0xff;
+                    raw_grad_data[n+1] = (val >> 8) & 0xff;
+                    raw_grad_data[n+2] = (val >> 16) & 0xff;
+                    raw_grad_data[n+3] = (val >> 24) & 0xff;
+                    
+                    # raw_grad_data[n+4] = val2 & 0xff;
+                    # raw_grad_data[n+5] = (val2 >> 8) & 0xff;
+                    # raw_grad_data[n+6] = (val2 >> 16) & 0xff;
+                    # raw_grad_data[n+7] = (val2 >> 24) & 0xff;
+
+                # number of samples acquired will determine how long the actual sequence runs for, both RF and gradients,
+                # since the processor is put into the reset state by the server once acquisition is complete
+                packet = construct_packet({'acq': 5000, 
+                                           'grad_mem_x': raw_grad_data,
+                                           })
                 reply = send_packet(packet, self.s)
+
                 acquired_data_raw = reply[4]['acq']
-                data = np.frombuffer(acquired_data_raw, np.complex64)        
+                data = np.frombuffer(acquired_data_raw, np.complex64)
+                # time.sleep(0.1)
+
+                for sti in ('infos','warnings','errors'):
+                    try:
+                        for k in reply[5][sti]:
+                            print(k)
+                    except KeyError:
+                        pass                    
+                
+        if False:
+            # ramp the x gradient voltage offset
+            for k in range(100):
+                packet = construct_packet({'acq': 100,
+                                           'grad_offs_x': (k * 655 - 32768) & 0xffff}) # .astype(np.int16)})
+                reply = send_packet(packet, self.s)
+
+                acquired_data_raw = reply[4]['acq']
+                data = np.frombuffer(acquired_data_raw, np.complex64)
+                # time.sleep(0.1)
+
+                for sti in ('infos','warnings','errors'):
+                    try:
+                        for k in reply[5][sti]:
+                            print(k)
+                    except KeyError:
+                        pass                    
+                
+            # for k in range(3):
+            #     reply = send_packet(packet, self.s)
+            #     acquired_data_raw = reply[4]['acq']
+            #     data = np.frombuffer(acquired_data_raw, np.complex64)        
 
         if False:
             self.assertEqual(reply[:4], [reply_pkt, 1, 0, version_full])
