@@ -4,13 +4,15 @@ import msgpack
 
 version_major = 0
 version_minor = 0
-version_debug = 7
+version_debug = 8
 version_full = (version_major << 16) | (version_minor << 8) | version_debug
 
 request_pkt = 0
 emergency_stop_pkt = 1
 close_server_pkt = 2
 reply_pkt = 128
+
+fpga_clock_freq_MHz = 122.88
 
 def construct_packet(data, packet_idx=0, command=request_pkt, version=(version_major, version_minor, version_debug)):
     vma, vmi, vd = version

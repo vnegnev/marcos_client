@@ -88,7 +88,7 @@ class ServerTest(unittest.TestCase):
         )
 
     def test_several_okay(self):
-        packet = construct_packet({'rx_freq': 0x7000000, # floats instead of uints
+        packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
                                    'rf_amp': 8000,
                                    'rx_rate': 250,
@@ -100,7 +100,7 @@ class ServerTest(unittest.TestCase):
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'rx_freq': 0, 'tx_div': 0, 'rf_amp': 0, 'rx_rate': 0, 'tx_size': 0, 'tx_samples': 0, 'recomp_pul': 0, 'raw_tx_data': 0},
+                          {'lo_freq': 0, 'tx_div': 0, 'rf_amp': 0, 'rx_rate': 0, 'tx_size': 0, 'tx_samples': 0, 'recomp_pul': 0, 'raw_tx_data': 0},
                           {'infos': [
                               'true RX freq: 13.440000 MHz',
                               'TX sample duration: 0.081380 us',
@@ -110,7 +110,7 @@ class ServerTest(unittest.TestCase):
 
     def test_several_some_bad(self):
         # first, send a normal packet to ensure everything's in a known state
-        packetp = construct_packet({'rx_freq': 0x7000000, # floats instead of uints
+        packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                     'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
                                     'rf_amp': 8000,
                                     'rx_rate': 250,
@@ -122,7 +122,7 @@ class ServerTest(unittest.TestCase):
         send_packet(packetp, self.s)        
 
         # Now, try sending with some issues
-        packet = construct_packet({'rx_freq': 0x7000000, # floats instead of uints
+        packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 100000, # 813.8us sampling for 122.88 clock freq
                                    'rf_amp': 100, # TODO: make a test where this is too large
                                    'rx_rate': 32767,
@@ -134,7 +134,7 @@ class ServerTest(unittest.TestCase):
         # st()
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'rx_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'rx_rate': -1, 'tx_size': -1, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
+                          {'lo_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'rx_rate': -1, 'tx_size': -1, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
                           {'errors': ['RX rate outside the range [25, 8192]; check your settings',
                                       'TX size outside the range [1, 32767]; check your settings',
                                       'too much raw TX data'],
@@ -211,7 +211,7 @@ class ServerTest(unittest.TestCase):
     @unittest.skip("rewrite needed")
     def test_bad_packet_format(self):
         packet = construct_packet({'configure_hw':
-                                   {'rx_freq': 7.12345, # floats instead of uints
+                                   {'lo_freq': 7.12345, # floats instead of uints
                                     'tx_div': 1.234}})
         reply_packet = send_packet(packet, self.s)
         # CONTINUE HERE: this should be handled gracefully by the server

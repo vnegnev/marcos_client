@@ -27,7 +27,7 @@ class AcquireTest(unittest.TestCase):
 
     def test_acquire(self):
         # Top-level parameters
-        rx_freq = 2 # LO frequency, MHz
+        lo_freq = 2 # LO frequency, MHz
         samples = 800 # number of samples to acquire
         divisor = 2 # TX sampling rate divisor, i.e. 3 means TX samples are output at 1/3 of the rate of the FPGA clock. Minimum value is 2
         sampling_divisor = 123 # as above, I think (+/- 1 error); 123 means it'll be around 1 sample per us
@@ -45,13 +45,13 @@ class AcquireTest(unittest.TestCase):
         tx_arg = 2 * np.pi * xaxis * tx_iq_freq
         if False:
             # sinewaves, for loopback testing
-            tx_i = np.round(rf_amp * np.cos(tx_arg) ).astype(np.ushort) # note signed -> unsigned for binary maths!
-            tx_q = np.round(rf_amp * np.sin(tx_arg) ).astype(np.ushort)
+            tx_i = np.round(rf_amp * np.cos(tx_arg) ).astype(np.uint16) # note signed -> unsigned for binary maths!
+            tx_q = np.round(rf_amp * np.sin(tx_arg) ).astype(np.uint16)
         else:
             # Gaussian envelope, for oscilloscope testing
             xmid = (xaxis[0] + xaxis[-1])/2
             gaus_sd = xmid/2
-            tx_i = np.round(rf_amp * np.exp(-(xaxis - xmid) ** 2 / (gaus_sd ** 2) ) ).astype(np.ushort)
+            tx_i = np.round(rf_amp * np.exp(-(xaxis - xmid) ** 2 / (gaus_sd ** 2) ) ).astype(np.uint16)
             # plt.plot(tx_i);plt.show()
             tx_q = tx_i
         
@@ -69,8 +69,8 @@ class AcquireTest(unittest.TestCase):
         sequence_byte_array = ass.assemble("ocra_lib/se_default_vn.txt") # no samples appear since no acquisition takes place
         # sequence_byte_array = ass.assemble("ocra_lib/se_default.txt")        
         
-        packet = construct_packet({# 'rx_freq': 0x8000000,
-            'rx_freq': int(np.round(rx_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf,
+        packet = construct_packet({# 'lo_freq': 0x8000000,
+            'lo_freq': int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf,
             'tx_div': divisor - 1,
             'rx_rate': sampling_divisor,
             'tx_size': 32767,
@@ -145,11 +145,11 @@ class AcquireTest(unittest.TestCase):
                 # Concatenate
                 dac_waveform = np.hstack([ramp, sine])
                 
-                # np.ushort: actually it needs to be a 16-bit 2's
+                # np.uint16: actually it needs to be a 16-bit 2's
                 # complement signed int, but Python tracks the sign
                 # independently from the value which complicates the
                 # bitwise arithmetic in the for loop below
-                dac_data = np.round(dac_waveform * 32767).astype(np.ushort)
+                dac_data = np.round(dac_waveform * 32767).astype(np.uint16)
                 for k, r in enumerate(dac_data): # 8192//4):
                     assert k < 8192//4, "Too much data for the gradient RAM"
                     n = 4 * k
