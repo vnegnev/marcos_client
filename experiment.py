@@ -12,6 +12,7 @@ import pdb
 st = pdb.set_trace
 
 from local_config import ip_address, port
+from ocra_lib.assembler import Assembler
 from server_comms import *
 
 class Experiment:
@@ -27,7 +28,8 @@ class Experiment:
                  samples=1000,
                  lo_freq=5,
                  tx_t=0.1,
-                 rx_t=0.5):
+                 rx_t=0.5,
+                 instruction_file="ocra_lib/spin_echo.txt"):
         self.samples = samples
 
         self.lo_freq_bin = int(np.round(lo_freq / fpga_clock_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
@@ -38,6 +40,9 @@ class Experiment:
         
         self.tx_div = int(np.round(tx_t * fpga_clock_freq_MHz))
         self.tx_t = self.tx_div / fpga_clock_freq_MHz
+
+        self.instruction_file = instruction_file
+        self.asmb = Assembler
 
         # Segments for RF TX and gradient BRAMs
         self.tx_offsets = []
@@ -103,10 +108,20 @@ class Experiment:
         self.grad_x_bytes[2::4] = (gr >> 12) | 0x10
         self.grad_x_bytes[3::4] = 0 # wasted?
 
+    def compile_instructions(self):
+        # For now quite simple (using the ocra assembler)
+        # Will use a more advanced approach in the future to avoid having to hand-code the instruction files
+        self.instructions = self.asmb.assemble(self.instruction_file)        
+
+    def compile(self):
+        self.compile_tx_data()
+        self.compile_grad_data()
+        self.compile_instructions()        
+
     def run(self):
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
-        self.compile_data()
+        self.compile()
 
 
 def test_Experiment():
