@@ -11,9 +11,9 @@ import scipy.signal as sig
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port
+from local_config import ip_address, port, fpga_clk_freq_MHz
 from ocra_lib.assembler import Assembler
-from server_comms import *
+import server_comms as sc
 
 class Experiment:
     """ Wrapper class for managing an entire experimental sequence 
@@ -29,20 +29,20 @@ class Experiment:
                  lo_freq=5,
                  tx_t=0.1,
                  rx_t=0.5,
-                 instruction_file="ocra_lib/spin_echo.txt"):
+                 instruction_file="ocra_lib/grad_echo.txt"):
         self.samples = samples
 
-        self.lo_freq_bin = int(np.round(lo_freq / fpga_clock_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
-        self.lo_freq = self.lo_freq_bin * fpga_clock_freq_MHz / (1 << 30)
+        self.lo_freq_bin = int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
+        self.lo_freq = self.lo_freq_bin * fpga_clk_freq_MHz / (1 << 30)
                 
-        self.rx_div = int(np.round(rx_t * fpga_clock_freq_MHz))
-        self.rx_t = self.rx_div / fpga_clock_freq_MHz
+        self.rx_div = int(np.round(rx_t * fpga_clk_freq_MHz))
+        self.rx_t = self.rx_div / fpga_clk_freq_MHz
         
-        self.tx_div = int(np.round(tx_t * fpga_clock_freq_MHz))
-        self.tx_t = self.tx_div / fpga_clock_freq_MHz
+        self.tx_div = int(np.round(tx_t * fpga_clk_freq_MHz))
+        self.tx_t = self.tx_div / fpga_clk_freq_MHz
 
         self.instruction_file = instruction_file
-        self.asmb = Assembler
+        self.asmb = Assembler()
 
         # Segments for RF TX and gradient BRAMs
         self.tx_offsets = []
@@ -89,10 +89,11 @@ class Experiment:
         tx_i = np.round(32767 * self.tx_data.real).astype(np.uint16)
         tx_q = np.round(32767 * self.tx_data.imag).astype(np.uint16)
 
-        self.tx_bytes[::4] = tx_i & 0xff
-        self.tx_bytes[1::4] = tx_i >> 8
-        self.tx_bytes[2::4] = tx_q & 0xff
-        self.tx_bytes[3::4] = tx_q >> 8
+        # TODO: find a better way to encode the interleaved bytearray
+        self.tx_bytes[::4] = (tx_i & 0xff).astype(np.uint8).tobytes()
+        self.tx_bytes[1::4] = (tx_i >> 8).astype(np.uint8).tobytes()
+        self.tx_bytes[2::4] = (tx_q & 0xff).astype(np.uint8).tobytes()
+        self.tx_bytes[3::4] = (tx_q >> 8).astype(np.uint8).tobytes()
 
     def compile_grad_data(self):
         """ go through the grad X data and prepare binary array to send to the server """
@@ -102,11 +103,12 @@ class Experiment:
         
         gr = np.round(32767 * self.grad_data).astype(np.uint16)
         
-        # TODO: check that this makes sense relative to test_acquire
-        self.grad_x_bytes[::4] = (gr & 0xf) << 4
-        self.grad_x_bytes[1::4] = (gr & 0xff0) >> 4
-        self.grad_x_bytes[2::4] = (gr >> 12) | 0x10
-        self.grad_x_bytes[3::4] = 0 # wasted?
+        # TODO: check that this makes sense relative to test_acquire,
+        # and find a better way to encode the interleaved bytearray
+        self.grad_x_bytes[::4] = ((gr & 0xf) << 4).astype(np.uint8).tobytes()
+        self.grad_x_bytes[1::4] = ((gr & 0xff0) >> 4).astype(np.uint8).tobytes()
+        self.grad_x_bytes[2::4] = ((gr >> 12) | 0x10).astype(np.uint8).tobytes()
+        self.grad_x_bytes[3::4] = np.zeros(self.grad_data.size, dtype=np.uint8).tobytes() # wasted?
 
     def compile_instructions(self):
         # For now quite simple (using the ocra assembler)
@@ -116,13 +118,29 @@ class Experiment:
     def compile(self):
         self.compile_tx_data()
         self.compile_grad_data()
-        self.compile_instructions()        
+        self.compile_instructions()
 
     def run(self):
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
         self.compile()
+        packet = sc.construct_packet({
+            'lo_freq': self.lo_freq_bin,
+            'rx_rate': self.rx_div,
+            'tx_div': self.tx_div,
+            'tx_size': self.tx_data.size * 4,
+            'raw_tx_data': self.tx_bytes,
+            'grad_mem_x': self.grad_x_bytes,
+            'seq_data': self.instructions,
+            'acq': self.samples})
 
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.connect( (ip_address, port) )
+        
+        reply = sc.send_packet(packet, s)
+
+        # Better handling of reply packet; i.e. print infos, warnings and errors
+        return np.frombuffer(reply[4]['acq'], np.complex64)
 
 def test_Experiment():
     exp = Experiment()
@@ -142,7 +160,7 @@ def test_Experiment():
     grad_idx = exp.add_grad_x(grad)    
 
     data = exp.run()
-    
+
     # plt.plot(tg, grad)
     # plt.show()
         
