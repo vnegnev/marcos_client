@@ -143,7 +143,7 @@ class Experiment:
         return np.frombuffer(reply[4]['acq'], np.complex64)
 
 def test_Experiment():
-    exp = Experiment()
+    exp = Experiment(samples=500)
     
     # first TX segment
     t = np.linspace(0, 100, 1001) # goes to 100us, samples every 100ns
@@ -152,18 +152,60 @@ def test_Experiment():
     tx_idx = exp.add_tx(tx_x)
 
     # first gradient segment
-    tg = np.linspace(0, 50, 51) # goes to 50us, samples every 1us (sampling rate is fixed right now)
-    tmean = 25
-    tstd = 10
+    tg = np.linspace(0, 500, 51) # goes to 500us, samples every 10us (sampling rate is fixed right now)
+    tmean = 250
+    tstd = 100
 
     grad = np.exp(-(tg-tmean)**2/tstd**2) # Gaussian 
     grad_idx = exp.add_grad_x(grad)    
 
     data = exp.run()
 
-    # plt.plot(tg, grad)
-    # plt.show()
+    plt.plot(tg, data)
+    plt.show()
+
+def test_grad_echo():
+    exp = Experiment(samples=1900 + 210, lo_freq=0.5) # sampling rate is off by 2x?
+    
+    # RF pulse
+    t = np.linspace(0, 200, 2001) # goes to 200us, samples every 100ns; length of pulse must be adjusted in grad_echo.txt
+
+    # Square pulse
+    if False:
+        freq = 0.1 # MHz, offset from LO freq (DC up to a few MHz possible)
+        tx_x = np.cos(2*np.pi*freq*t) + 1j*np.sin(2*np.pi*freq*t) # I,Q samples
+        tx_idx = exp.add_tx(tx_x) # add the data to the ocra TX memory
+    else:
+        # sinc pulse
+        tx_x = np.sinc( (t - 100) / 25 )
+        tx_idx = exp.add_tx(tx_x) # add the data to the ocra TX memory
+
+    # 2nd RF pulse, for testing
+    tx_x2 = tx_x*0.5
+    tx_idx2 = exp.add_tx(tx_x2)
+
+    # gradient echo; 190 samples total: 50 for first ramp, 140 for second ramp
+    grad = np.hstack([
+        np.linspace(0, 0.9, 10), np.ones(30), np.linspace(0.9, 0, 10), # first ramp up/down
+        np.linspace(0,-0.285, 20), -0.3 * np.ones(100), np.linspace(-0.285, 0, 20)
+        ])
+
+    # Correct for DC offset and scaling
+    scale = 0.8
+    offset = -0.1
+    grad_corr = grad*scale + offset
+    
+    grad_idx = exp.add_grad_x(grad_corr)
+    if False: # set to true if you want to plot the x gradient waveform
+        plt.plot(grad);plt.show()
+
+    data = exp.run()
+
+    plt.plot(np.real(data))
+    plt.plot(np.imag(data))    
+    plt.show()
         
 if __name__ == "__main__":
-    test_Experiment()
+    # test_Experiment()
+    test_grad_echo()
     

@@ -114,21 +114,6 @@ class AcquireTest(unittest.TestCase):
             raw_grad_data = bytearray(4096 * 2)
             
             for k in range(100):
-
-                # # OLD, but needed to initialise the DACs somehow
-                # val = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4) ;
-                # val2 = 0x00200002;
-
-                # raw_grad_data[0] = val & 0xff;
-                # raw_grad_data[1] = (val >> 8) & 0xff;
-                # raw_grad_data[2] = (val >> 16) & 0xff;
-                # raw_grad_data[3] = (val >> 24) & 0xff;
-                
-                # raw_grad_data[4] = val2 & 0xff;
-                # raw_grad_data[5] = (val2 >> 8) & 0xff;
-                # raw_grad_data[6] = (val2 >> 16) & 0xff;
-                # raw_grad_data[7] = (val2 >> 24) & 0xff;
-
                 # Ramp from min. to max. voltage
                 ramp_samples = 90
                 ramp = np.linspace(-1, 1, ramp_samples) # between -1 and 1, which are the DAC output full-scale limits (NOT voltage)
@@ -161,6 +146,21 @@ class AcquireTest(unittest.TestCase):
                     # raw_grad_data[n+5] = (val2 >> 8) & 0xff;
                     # raw_grad_data[n+6] = (val2 >> 16) & 0xff;
                     # raw_grad_data[n+7] = (val2 >> 24) & 0xff;
+
+                # # OLD, but needed to initialise the DACs somehow
+                if True:
+                    val = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4) ;
+                    val2 = 0x00200002;
+
+                    raw_grad_data[0] = val & 0xff;
+                    raw_grad_data[1] = (val >> 8) & 0xff;
+                    raw_grad_data[2] = (val >> 16) & 0xff;
+                    raw_grad_data[3] = (val >> 24) & 0xff;
+
+                    raw_grad_data[4] = val2 & 0xff;
+                    raw_grad_data[5] = (val2 >> 8) & 0xff;
+                    raw_grad_data[6] = (val2 >> 16) & 0xff;
+                    raw_grad_data[7] = (val2 >> 24) & 0xff;                    
 
                 # number of samples acquired will determine how long the actual sequence runs for, both RF and gradients,
                 # since the processor is put into the reset state by the server once acquisition is complete

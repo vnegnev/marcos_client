@@ -34,18 +34,24 @@ NOP   // A[1B] UNUSED
 NOP   // A[1C] UNUSED
 TXOFFSET 0 							// A[1D] TXOFFSET 0: RF 90x+				"JNZ here"
 GRADOFFSET 0 						// A[1E] GRADOFFSET 0
-PR 7, 910		// wait&grad; 900 for 90 samples at 10us/sample, plus extra 10us to handle off-by-one error
-PR 11, 10  		// TX GATE ON for 20 us        // A[1F] // Length determines how many gradient samples are put out
-// PR 6, 1500  		// TX GATE ON for 200 us        // A[1F]
-PR 5, 267		// RF 90        	        // A[20] PR R[5] (issue CMD5) and unblank for 120 us
-PR 3, 10		// wait				// A[21] PR R[3] (issue CMD3) and last for 4855 us (5000-145)
-TXOFFSET 0						// A[22] TXOFFSET 1000: RF 180x+
-GRADOFFSET 90 // A[1E] GRADOFFSET 0
-PR 11, 50		// TX GATE ON for 50 us        // A[23]
-PR 5, 267		// RF 180			// A[24] PR R[5] (issue CMD5) and unblank for 180 us
-PR 8, 2010		// gradient and readout (readout continues independent of stop)
-PR 3, 2010		// wait				// A[21] PR R[3] (issue CMD3) and last for 4855 us (5000-145)
-PR 4, 0  		// stop	(TX and grad)
+PR 5, 210 // TX pulse
+PR 8, 1900 // Grad and acquisition
+TXOFFSET 2001
+PR 6, 200 // TX pulse again, with acquisition
+// PR 8, 500 // Grad and more acquisition
+PR 3, 200  // everything off (doesn't have to be for long; just ends the TX pulse)
+// PR 7, 910		// wait&grad; 900 for 90 samples at 10us/sample, plus extra 10us to handle off-by-one error
+// PR 11, 10  		// TX GATE ON for 20 us        // A[1F] // Length determines how many gradient samples are put out
+// // PR 6, 1500  		// TX GATE ON for 200 us        // A[1F]
+// PR 5, 267		// RF 90        	        // A[20] PR R[5] (issue CMD5) and unblank for 120 us
+// PR 3, 10		// wait				// A[21] PR R[3] (issue CMD3) and last for 4855 us (5000-145)
+// TXOFFSET 0						// A[22] TXOFFSET 1000: RF 180x+
+// GRADOFFSET 90 // A[1E] GRADOFFSET 0
+// PR 11, 50		// TX GATE ON for 50 us        // A[23]
+// PR 5, 267		// RF 180			// A[24] PR R[5] (issue CMD5) and unblank for 180 us
+// PR 8, 2010		// gradient and readout (readout continues independent of stop)
+// PR 3, 2010		// wait				// A[21] PR R[3] (issue CMD3) and last for 4855 us (5000-145)
+// PR 4, 0  		// stop	(TX and grad)
 DEC 2 			// A[28] DEC R[2]
 JNZ 2, 0x1D 		// A[29] JNZ R[2] => `PC=0x1D
 HALT 			// A[2A] HALT
