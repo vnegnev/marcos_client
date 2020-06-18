@@ -66,17 +66,29 @@ class Experiment:
 
         return len(self.tx_offsets) - 1
 
-    def add_grad_x(self, vec):
-        """ vec: real vector in the range [-1,1] units of full-scale gradient DAC output.
+    def add_grad(self, vec_x, vec_y, vec_z):
+        """ vec_x/y/z: real vector in the range [-1,1] units of full-scale gradient DAC output.
         
         Returns the index of the relevant vector, which can be used later when the pulse sequence is being compiled.
         """
+        assert vec_x.size == vec_y.size == vec_z.size, "Supply equal-length vectors for the three gradients."
         self.grad_offsets.append(self.current_grad_offset)
-        self.current_grad_offset += vec.size
+        self.current_grad_offset += vec_x.size
+
         try:
-            self.grad_data = np.hstack( [self.grad_data, vec] )
+            self.grad_data_x = np.hstack( [self.grad_data_x, vec_x] )
         except AttributeError:
-            self.grad_data = vec
+            self.grad_data_x = vec_x
+
+        try:
+            self.grad_data_y = np.hstack( [self.grad_data_y, vec_y] )
+        except AttributeError:            
+            self.grad_data_y = vec_y
+
+        try:            
+            self.grad_data_z = np.hstack( [self.grad_data_z, vec_z] )
+        except AttributeError:            
+            self.grad_data_z = vec_z
 
         return len(self.grad_offsets) - 1
 
@@ -96,19 +108,34 @@ class Experiment:
         self.tx_bytes[3::4] = (tx_q >> 8).astype(np.uint8).tobytes()
 
     def compile_grad_data(self):
-        """ go through the grad X data and prepare binary array to send to the server """
-        self.grad_x_bytes = bytearray(self.grad_data.size * 4)
-        if np.any(np.abs(self.grad_data) > 1.0):
-            warnings.warn("Grad data too large! Overflow will occur.")
+        """ go through the grad data and prepare binary array to send to the server """
+        self.grad_x_bytes = bytearray(self.grad_data_x.size * 4)
+        self.grad_y_bytes = bytearray(self.grad_data_y.size * 4)
+        self.grad_z_bytes = bytearray(self.grad_data_z.size * 4)
+        for gd in [self.grad_data_x, self.grad_data_y, self.grad_data_z]:
+            if np.any(np.abs(gd) > 1.0):
+                warnings.warn("Grad data too large! Overflow will occur.")
         
-        gr = np.round(32767 * self.grad_data).astype(np.uint16)
+        grx = np.round(32767 * self.grad_data_x).astype(np.uint16)
+        gry = np.round(32767 * self.grad_data_y).astype(np.uint16)
+        grz = np.round(32767 * self.grad_data_z).astype(np.uint16)        
         
         # TODO: check that this makes sense relative to test_acquire,
         # and find a better way to encode the interleaved bytearray
-        self.grad_x_bytes[::4] = ((gr & 0xf) << 4).astype(np.uint8).tobytes()
-        self.grad_x_bytes[1::4] = ((gr & 0xff0) >> 4).astype(np.uint8).tobytes()
-        self.grad_x_bytes[2::4] = ((gr >> 12) | 0x10).astype(np.uint8).tobytes()
-        self.grad_x_bytes[3::4] = np.zeros(self.grad_data.size, dtype=np.uint8).tobytes() # wasted?
+        self.grad_x_bytes[::4] = ((grx & 0xf) << 4).astype(np.uint8).tobytes()
+        self.grad_x_bytes[1::4] = ((grx & 0xff0) >> 4).astype(np.uint8).tobytes()
+        self.grad_x_bytes[2::4] = ((grx >> 12) | 0x10).astype(np.uint8).tobytes()
+        self.grad_x_bytes[3::4] = np.zeros(self.grad_data_x.size, dtype=np.uint8).tobytes() # wasted?
+
+        self.grad_y_bytes[::4] = ((gry & 0xf) << 4).astype(np.uint8).tobytes()
+        self.grad_y_bytes[1::4] = ((gry & 0xff0) >> 4).astype(np.uint8).tobytes()
+        self.grad_y_bytes[2::4] = ((gry >> 12) | 0x10).astype(np.uint8).tobytes()
+        self.grad_y_bytes[3::4] = np.zeros(self.grad_data_y.size, dtype=np.uint8).tobytes() # wasted?
+        
+        self.grad_z_bytes[::4] = ((grz & 0xf) << 4).astype(np.uint8).tobytes()
+        self.grad_z_bytes[1::4] = ((grz & 0xff0) >> 4).astype(np.uint8).tobytes()
+        self.grad_z_bytes[2::4] = ((grz >> 12) | 0x10).astype(np.uint8).tobytes()
+        self.grad_z_bytes[3::4] = np.zeros(self.grad_data_z.size, dtype=np.uint8).tobytes() # wasted?
 
     def compile_instructions(self):
         # For now quite simple (using the ocra assembler)
@@ -131,6 +158,8 @@ class Experiment:
             'tx_size': self.tx_data.size * 4,
             'raw_tx_data': self.tx_bytes,
             'grad_mem_x': self.grad_x_bytes,
+            'grad_mem_y': self.grad_y_bytes,
+            'grad_mem_z': self.grad_z_bytes,            
             'seq_data': self.instructions,
             'acq': self.samples})
 
@@ -157,7 +186,7 @@ def test_Experiment():
     tstd = 100
 
     grad = np.exp(-(tg-tmean)**2/tstd**2) # Gaussian 
-    grad_idx = exp.add_grad_x(grad)    
+    grad_idx = exp.add_grad(grad, np.zeros_like(grad), np.zeros_like(grad))
 
     data = exp.run()
 
@@ -191,13 +220,13 @@ def test_grad_echo():
         ])
 
     # Correct for DC offset and scaling
-    scale = 0.8
-    offset = -0.1
+    scale = 0.9
+    offset = 0.0
     grad_corr = grad*scale + offset
     
-    grad_idx = exp.add_grad_x(grad_corr)
+    grad_idx = exp.add_grad(grad_corr, grad_corr, grad_corr)
     if False: # set to true if you want to plot the x gradient waveform
-        plt.plot(grad);plt.show()
+        plt.plot(grad_corr);plt.show()
 
     data = exp.run()
 

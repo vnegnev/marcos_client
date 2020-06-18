@@ -166,6 +166,8 @@ class AcquireTest(unittest.TestCase):
                 # since the processor is put into the reset state by the server once acquisition is complete
                 packet = construct_packet({'acq': 5000, 
                                            'grad_mem_x': raw_grad_data,
+                                           'grad_mem_y': raw_grad_data,
+                                           'grad_mem_z': raw_grad_data,
                                            })
                 reply = send_packet(packet, self.s)
 
@@ -183,8 +185,11 @@ class AcquireTest(unittest.TestCase):
         if False:
             # ramp the x gradient voltage offset
             for k in range(100):
+                grad_offs = (k * 655 - 32768) & 0xffff # .astype(np.int16)})
                 packet = construct_packet({'acq': 100,
-                                           'grad_offs_x': (k * 655 - 32768) & 0xffff}) # .astype(np.int16)})
+                                           'grad_offs_x': grad_offs,
+                                           'grad_offs_y': grad_offs,
+                                           'grad_offs_z': grad_offs})
                 reply = send_packet(packet, self.s)
 
                 acquired_data_raw = reply[4]['acq']
