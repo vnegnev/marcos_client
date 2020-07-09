@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port
+from local_config import ip_address, port, fpga_clk_freq_MHz
 from server_comms import *
 
 class ServerTest(unittest.TestCase):
@@ -93,7 +93,7 @@ class ServerTest(unittest.TestCase):
 
     def test_several_okay(self):
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                   'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
+                                   'tx_div': 10,
                                    'rf_amp': 8000,
                                    'rx_rate': 250,
                                    'tx_size': 250,
@@ -102,12 +102,17 @@ class ServerTest(unittest.TestCase):
                                    'raw_tx_data': b"0123456789abcdef"*4096
         })
         reply = send_packet(packet, self.s)
+
+        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
+        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
+        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
+        
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': 0, 'rf_amp': 0, 'rx_rate': 0, 'tx_size': 0, 'tx_samples': 0, 'recomp_pul': 0, 'raw_tx_data': 0},
                           {'infos': [
-                              'true RX freq: 13.440000 MHz',
-                              'TX sample duration: 0.081380 us',
+                              'true RX freq: {:s} MHz'.format(true_rx_freq),
+                              'TX sample duration: {:s} us'.format(tx_sample_duration),
                               'true RF amp: 12.207218',
                               'tx data bytes copied: 65536']}]
         )
@@ -115,7 +120,7 @@ class ServerTest(unittest.TestCase):
     def test_several_some_bad(self):
         # first, send a normal packet to ensure everything's in a known state
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
+                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq, 80ns for 125
                                     'rf_amp': 8000,
                                     'rx_rate': 250,
                                     'tx_size': 250,                                    
@@ -127,7 +132,7 @@ class ServerTest(unittest.TestCase):
 
         # Now, try sending with some issues
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                   'tx_div': 100000, # 813.8us sampling for 122.88 clock freq
+                                   'tx_div': 100000, # 813.8us sampling for 122.88 clock freq, 800us for 125
                                    'rf_amp': 100, # TODO: make a test where this is too large
                                    'rx_rate': 32767,
                                    'tx_size': 65535,
@@ -135,7 +140,11 @@ class ServerTest(unittest.TestCase):
                                    'recomp_pul': False,
                                    'raw_tx_data': b"0123456789abcdef"*4097})
         reply = send_packet(packet, self.s)
-        # st()
+
+        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
+        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
+        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
+        
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'rx_rate': -1, 'tx_size': -1, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
@@ -144,7 +153,9 @@ class ServerTest(unittest.TestCase):
                                       'too much raw TX data'],
                            'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
                                         'recomp_pul requested but set to false; doing nothing'],
-                           'infos': ['true RX freq: 13.440000 MHz', 'TX sample duration: 0.081380 us', 'true RF amp: 0.152590']}])
+                           'infos': ['true RX freq: {:s} MHz'.format(true_rx_freq),
+                                     'TX sample duration: {:s} us'.format(tx_sample_duration),
+                                     'true RF amp: 0.152590']}])
 
     def test_gradient_offsets(self):
         commands = ( 'grad_offs_x', 'grad_offs_y', 'grad_offs_z', 'grad_offs_z2' )
