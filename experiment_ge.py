@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.fft as fft
 import scipy.signal as sig
+import math
 
 import pdb
 st = pdb.set_trace
@@ -13,21 +14,40 @@ import server_comms as sc
 
 from experiment import Experiment
 
-def test_grad_echo_Elena():
+def sinc(x,tx_time,Nlobes,alpha):
+    y = []
+    t0 = (tx_time/2) / Nlobes
+    for ii in x:
+        if ii==0.0:
+            yy = 1.0
+        else:
+            yy = t0* ((1 - alpha) + alpha*np.cos(ii/ Nlobes / t0))*math.sin(ii/t0)/ii
+        y = np.append(y, yy)
+    return y
 
-    exp = Experiment(samples=600,
+def test_grad_echo_Elena():
+    samples_tmp = 140
+    tx_dt = 0.1
+    rx_dt = 3.33 #desired sampling dt
+    rx_dt_corr = rx_dt *0.5 #correction till the bug is fixed
+    
+    exp = Experiment(samples=samples_tmp,
                      lo_freq=14.2375,
-                     tx_t=0.1,
-                     rx_t=2,
+                     tx_t= tx_dt,
+                     rx_t=rx_dt_corr,
                      instruction_file="ocra_lib/grad_echo_elena.txt")
 
-     # RF pulse
-    t = np.linspace(0, 20, 201) # goes to 20us, samples every 10ns; length of pulse must be adjusted in grad_echo_elena.txt
+     # RF pulse`
+    tx_time = 20
+    t = np.linspace(0, tx_time, math.ceil(tx_time/tx_dt)+1) # goes to tx_time us, samples every tx_t us; length of pulse must be adjusted in grad_echo_elena.txt
+    
+    alpha = 0.46 # alpha=0.46 for Hamming window, alpha=0.5 for Hanning window
+    Nlobes = 1
+    ampl = 0.125
 
-    # sinc pulse
-    tx_x = np.sinc( (t - 10) / 6 )
+    #sinc pulse with Hamming window
+    tx_x = ampl * sinc(math.pi*(t - tx_time/2),tx_time,Nlobes,alpha)
     tx_idx = exp.add_tx(tx_x) # add the data to the ocra TX memory
-
 
     # gradient echo; 190 samples total: 50 for first ramp, 140 for second ramp
     grad = np.hstack([
@@ -45,11 +65,19 @@ def test_grad_echo_Elena():
         plt.plot(grad_corr);plt.show()
 
     data = exp.run()
+    data_mV = data*1000
+    
+    # time vector for representing the received data
+    samples_data = len(data)
+    t_rx = np.linspace(0, rx_dt*samples_data, samples_data) #us
 
-    plt.plot(np.real(data))
-    plt.plot(np.imag(data))
-    plt.plot(np.abs(data))
+    plt.plot(t_rx,np.real(data_mV))
+    plt.plot(t_rx,np.imag(data_mV))
+    plt.plot(t_rx,np.abs(data_mV))
     plt.legend(['real', 'imag', 'abs'])
+    plt.xlabel('time (us)')
+    plt.ylabel('signal received (mV)')
+    plt.title('sampled data = %i' %samples_data)
     plt.show()
 
 if __name__ == "__main__":
