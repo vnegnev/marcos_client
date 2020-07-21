@@ -2,6 +2,7 @@ import socket, time, warnings
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.fft as fft
+import scipy.io as io
 import scipy.signal as sig
 import math
 
@@ -32,18 +33,18 @@ def test_grad_echo_Elena():
     rx_dt_corr = rx_dt *0.5 #correction till the bug is fixed
     
     exp = Experiment(samples=samples_tmp,
-                     lo_freq=14.2375,
+                     lo_freq= 14.1711,
                      tx_t= tx_dt,
                      rx_t=rx_dt_corr,
                      instruction_file="ocra_lib/grad_echo_elena.txt")
 
      # RF pulse`
-    tx_time = 20
+    tx_time = 34
     t = np.linspace(0, tx_time, math.ceil(tx_time/tx_dt)+1) # goes to tx_time us, samples every tx_t us; length of pulse must be adjusted in grad_echo_elena.txt
     
     alpha = 0.46 # alpha=0.46 for Hamming window, alpha=0.5 for Hanning window
-    Nlobes = 1
-    ampl = 0.125
+    Nlobes = 4
+    ampl = 0.66 #0.8 in radioprocessor
 
     #sinc pulse with Hamming window
     tx_x = ampl * sinc(math.pi*(t - tx_time/2),tx_time,Nlobes,alpha)
@@ -67,9 +68,11 @@ def test_grad_echo_Elena():
     data = exp.run()
     data_mV = data*1000
     
-    # time vector for representing the received data
+    # time vector for representign the received data
     samples_data = len(data)
     t_rx = np.linspace(0, rx_dt*samples_data, samples_data) #us
+
+    io.savemat('test_rp_60.mat', dict(t_rx=t_rx, data_mV=data_mV))
 
     plt.plot(t_rx,np.real(data_mV))
     plt.plot(t_rx,np.imag(data_mV))

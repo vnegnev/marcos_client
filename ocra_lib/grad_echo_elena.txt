@@ -35,7 +35,8 @@ NOP   // A[1C] UNUSED
 TXOFFSET 0                          // A[1D] TXOFFSET 0: RF 90x+                "JNZ here"
 GRADOFFSET 0                        // A[1E] GRADOFFSET 0
 PR 12, 15 // Blanking delay
-PR 5, 20 // TX pulse
+PR 5, 34 // TX pulse
+PR 3, 30 // transient time
 PR 8, 934 // Grad and acquisition // By now, till the bug is corrected, it should be twice the desired acquisition time
 PR 3, 200  // everything off (doesn't have to be for long; just ends the TX pulse)
 DEC 2           // A[28] DEC R[2]
