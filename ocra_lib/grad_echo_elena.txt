@@ -10,7 +10,8 @@ CMD7 = GRAD_PULSE | RX_PULSE                        // A[8] GRAD
 CMD8 = GRAD_PULSE                                   // A[9] GRAD with receiver on
 CMD9 = TX_GATE | TX_PULSE | RX_PULSE | GRAD_PULSE       // A[A] RF&GRAD
 CMD10 = TX_GATE | TX_PULSE | GRAD_PULSE             // A[B] RF&GRAD with receiver on
-CMD12 = TX_GATE                             // A[C] 
+CMD12 = TX_GATE                             // A[C]
+CMD13 = GRAD_PULSE | TX_PULSE               // VN: new command for TX at the same time as data is acquired
 NOP   // A[C] UNUSED
 NOP   // A[D] UNUSED
 NOP   // A[E] UNUSED
@@ -26,6 +27,7 @@ LD64 9, CMD9                                // A[17] Load CMD9 to R[9]
 LD64 10, CMD10                              // A[18] Load CMD10 to R[10]
 LD64 11, CMD1                           // A[19] Load CMD1 to R[11]
 LD64 12, CMD12                          // A[19] Load CMD1 to R[11]
+LD64 13, CMD13                          // A[19] Load CMD1 to R[11]
 // auxiliary regs and values
 LD64 19, 0
 LD64 20, 100
@@ -36,7 +38,7 @@ TXOFFSET 0                          // A[1D] TXOFFSET 0: RF 90x+                
 GRADOFFSET 0                        // A[1E] GRADOFFSET 0
 PR 12, 15 // Blanking delay
 PR 5, 20 // TX pulse
-PR 8, 934 // Grad and acquisition // By now, till the bug is corrected, it should be twice the desired acquisition time
+PR 13, 934 // Grad and acquisition // By now, till the bug is corrected, it should be twice the desired acquisition time
 PR 3, 200  // everything off (doesn't have to be for long; just ends the TX pulse)
 DEC 2           // A[28] DEC R[2]
 JNZ 2, 0x1D         // A[29] JNZ R[2] => `PC=0x1D
