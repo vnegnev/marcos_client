@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+#
+# To run a single test, use e.g.:
+# python -m unittest test_server.ServerTest.test_bad_packet
+
 import socket, time, unittest
 import numpy as np
 import matplotlib.pyplot as plt

@@ -21,7 +21,9 @@ class Experiment:
     lo_freq: local oscillator frequency, MHz
     tx_t: RF TX sampling time in microseconds; will be rounded to a multiple of system clocks (for the STEMlab-122, it's 122.88 MHz). For example if tx_t = 1000, then a new RF TX sample will be output approximately every microsecond.
     (self.tx_t will have the true value after construction.)
-    rx_t: RF RX sampling time in microseconds; as above (approximately). If samples = 100 and rx_t = 1.5, then samples will be taken for 150 us total.    
+    rx_t: RF RX sampling time in microseconds; as above (approximately). If samples = 100 and rx_t = 1.5, then samples will be taken for 150 us total.
+    instruction_file: path to an assembly text file, which will be compiled by the OCRA assembler.py.
+    If this is not supplied, the instruction bytecode should be supplied manually using define_instructions() before run() is called.
     """
 
     def __init__(self,
@@ -29,14 +31,17 @@ class Experiment:
                  lo_freq=5,
                  tx_t=0.1,
                  rx_t=0.5,
-                 instruction_file="ocra_lib/grad_echo.txt"):
-        self.samples = samples
+                 instruction_file=None):
+        self.samples = samples        
 
         self.lo_freq_bin = int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
         self.lo_freq = self.lo_freq_bin * fpga_clk_freq_MHz / (1 << 30)
-                
+
         self.rx_div = int(np.round(rx_t * fpga_clk_freq_MHz))
         self.rx_t = self.rx_div / fpga_clk_freq_MHz
+
+        # Compensate for factor-of-2 discrepancy in sampling
+        self.rx_div_real = self.rx_div // 2 # this is actually what's sent over        
         
         self.tx_div = int(np.round(tx_t * fpga_clk_freq_MHz))
         self.tx_t = self.tx_div / fpga_clk_freq_MHz
@@ -109,6 +114,8 @@ class Experiment:
 
     def compile_grad_data(self):
         """ go through the grad data and prepare binary array to send to the server """
+        if not hasattr(self, 'grad_data_x'):
+            self.grad_data_x, self.grad_data_y, self.grad_data_z, self.grad_data_z2 = np.array([0]), np.array([0]), np.array([0]), np.array([0])
         self.grad_x_bytes = bytearray(self.grad_data_x.size * 4)
         self.grad_y_bytes = bytearray(self.grad_data_y.size * 4)
         self.grad_z_bytes = bytearray(self.grad_data_z.size * 4)
@@ -140,7 +147,11 @@ class Experiment:
     def compile_instructions(self):
         # For now quite simple (using the ocra assembler)
         # Will use a more advanced approach in the future to avoid having to hand-code the instruction files
-        self.instructions = self.asmb.assemble(self.instruction_file)        
+        if not hasattr(self, 'instructions'):
+            self.instructions = self.asmb.assemble(self.instruction_file)
+
+    def define_instructions(self, instructions):
+        self.instructions = instructions
 
     def compile(self):
         self.compile_tx_data()
@@ -153,7 +164,7 @@ class Experiment:
         self.compile()
         packet = sc.construct_packet({
             'lo_freq': self.lo_freq_bin,
-            'rx_rate': self.rx_div,
+            'rx_rate': self.rx_div_real,
             'tx_div': self.tx_div,
             'tx_size': self.tx_data.size * 4,
             'raw_tx_data': self.tx_bytes,
@@ -168,7 +179,20 @@ class Experiment:
         
         reply = sc.send_packet(packet, s)
 
-        # Better handling of reply packet; i.e. print infos, warnings and errors
+        try:
+            errors = reply[5]['errors']
+            for err in errors:
+                warnings.warn(err)
+        except KeyError:
+            pass
+
+        try:
+            warns = reply[5]['warnings']
+            for war in warns:
+                warnings.warn(war)
+        except KeyError:
+            pass
+        
         return np.frombuffer(reply[4]['acq'], np.complex64)
 
 def test_Experiment():
@@ -233,8 +257,47 @@ def test_grad_echo():
     plt.plot(np.real(data))
     plt.plot(np.imag(data))    
     plt.show()
+
+def test_rx_tx():
+    tx_t = 1 # us
+    rx_t = 0.5 # us
+    tx_pulse1_t = 50 # us
+    tx_pulse2_t = 50 # us
+    rx_pulse1_t = 50 # us
+    tx_offset_f = 0.05 # MHz (50 kHz)
+    samples = 300
+    # samples=int(rx_pulse1_t // rx_t)
+    
+    exp = Experiment(samples=samples,
+                     lo_freq=2, tx_t=tx_t, rx_t=rx_t,
+                     instruction_file="ocra_lib/rx_tx_test.txt")
+
+    t = np.arange(0, tx_pulse1_t, tx_t)
+    v_ramp = np.linspace(0.3, 1, t.size)
+    tx_y = v_ramp * (
+        np.cos(2 * np.pi * tx_offset_f * t)
+        + 1j * np.sin(2 * np.pi * tx_offset_f * t) )
+    exp.add_tx(tx_y * 0.1) # extra scaling
+
+    if False:
+        plt.plot(t, tx_y.real)
+        plt.plot(t, tx_y.imag)
+        plt.xlabel('time (us)')
+        plt.show()
+
+    data = exp.run()
+
+    data_t = np.linspace(0, samples*rx_t, samples)
+    plt.plot(data_t, data.real)
+    plt.plot(data_t, data.imag)
+    plt.xlabel('time (us)')
+
+    plt.savefig('/tmp/images/tx_t_{:.1f}_rx_t_{:.1f}_pr0_{:.1f}_pr1_{:.1f}_samples{:.1f}.png'.format(
+        tx_t, tx_t, 1, 50, samples))
+    
+    plt.show()
         
 if __name__ == "__main__":
     # test_Experiment()
-    test_grad_echo()
-    
+    # test_grad_echo()
+    test_rx_tx()
