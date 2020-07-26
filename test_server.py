@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port, fpga_clk_freq_MHz
+from local_config import ip_address, port
 from server_comms import *
 
 class ServerTest(unittest.TestCase):
@@ -26,15 +26,15 @@ class ServerTest(unittest.TestCase):
         self.s.close()
 
     def test_version(self):
-        versions = [ (0,0,0), (0,0,6), (0,1,100), (0,1,255), (1,5,7), (255,255,255) ]
+        versions = [ (0,1,1), (0,1,255), (0,2,100), (0,2,255), (1,5,7), (255,255,255) ]
         statuses = [
-            {'infos': ['Client version 0.0.0 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+            {'infos': ['Client version 0.1.1 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
              'errors': ['not all client commands were understood']},
-            {'infos': ['Client version 0.0.6 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+            {'infos': ['Client version 0.1.255 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
              'errors': ['not all client commands were understood']},
-            {'warnings': ['Client version 0.1.100 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+            {'warnings': ['Client version 0.2.100 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
              'errors': ['not all client commands were understood']},
-            {'warnings': ['Client version 0.1.255 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
+            {'warnings': ['Client version 0.2.255 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
              'errors': ['not all client commands were understood']},
             {'errors': ['Client version 1.5.7 significantly different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug),
                         'not all client commands were understood']},
@@ -169,7 +169,7 @@ class ServerTest(unittest.TestCase):
                           {}])
 
     def test_gradient_mem(self):
-        channels = ( 'x', 'y', 'z')
+        channels = ( 'x', 'y', 'z', 'z2')
         grad_mem_bytes = 2 * 4096
 
         # everything should be fine
@@ -197,15 +197,6 @@ class ServerTest(unittest.TestCase):
                               {'grad_mem_{:s}'.format(c): -1},
                               {'errors': ['too much grad mem {:s} data: {:d} bytes > {:d}'.format(c, grad_mem_bytes + 1, grad_mem_bytes)] }
                              ])
-
-        # ensure that Z2 is not yet implemented
-        packet = construct_packet({'grad_mem_z2' : raw_data})
-        reply = send_packet(packet, self.s)
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full,
-                          {'grad_mem_z2': -1},
-                          {'errors': ['grad_mem_z2 not yet implemented'] }
-                         ])
 
     def test_acquire_simple(self):
         # For comprehensive test, see test_acquire.py
