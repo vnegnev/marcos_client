@@ -168,6 +168,7 @@ class AcquireTest(unittest.TestCase):
                                            'grad_mem_x': raw_grad_data,
                                            'grad_mem_y': raw_grad_data,
                                            'grad_mem_z': raw_grad_data,
+                                           'grad_mem_z2': raw_grad_data
                                            })
                 reply = send_packet(packet, self.s)
 

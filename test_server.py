@@ -146,19 +146,8 @@ class ServerTest(unittest.TestCase):
                                         'recomp_pul requested but set to false; doing nothing'],
                            'infos': ['true RX freq: 13.440000 MHz', 'TX sample duration: 0.081380 us', 'true RF amp: 0.152590']}])
 
-    def test_gradient_offsets(self):
-        commands = ( 'grad_offs_x', 'grad_offs_y', 'grad_offs_z', 'grad_offs_z2' )
-        packet = construct_packet({commands[0]: -60000,
-                                   commands[1]: 60000,
-                                   commands[2]: 12345})
-        reply = send_packet(packet, self.s)
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full,
-                          {'grad_offs_x': 0, 'grad_offs_y': 0, 'grad_offs_z': 0},
-                          {}])
-
     def test_gradient_mem(self):
-        channels = ( 'x', 'y', 'z')
+        channels = ( 'x', 'y', 'z', 'z2')
         grad_mem_bytes = 2 * 4096
 
         # everything should be fine
