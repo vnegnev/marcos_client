@@ -76,8 +76,8 @@ class AcquireTest(unittest.TestCase):
             #'tx_samples': 1,
             # 'recomp_pul': True,
             'raw_tx_data': raw_tx_data,
-            'seq_data': sequence_byte_array,
-            'acq': samples
+            # 'acq': samples,
+            'seq_data': sequence_byte_array
         })
 
         reply = send_packet(packet, self.s)
@@ -88,30 +88,8 @@ class AcquireTest(unittest.TestCase):
             except KeyError:
                 pass
 
-        acquired_data_raw = reply[4]['acq']
-        data = np.frombuffer(acquired_data_raw, np.complex64)
-        # data = np.frombuffer(acquired_data_raw, np.uint64) # ONLY FOR DEBUGGING THE FIFO COUNT
-
-        if False:
-                # mkr = '-'
-                mkr = '.'
-                fig, axs = plt.subplots(2,1)
-                axs[0].plot(data.real, '.')
-                axs[0].plot(data.imag, '.')                
-
-                # N = data.size
-                # f_axis = fft.fftfreq(N, d=rx_sample_period)[:N//2]
-                # spectrum = np.abs(fft.fft(sig.detrend(data)))[:N//2]
-                f_axis, spectrum = sig.welch(data, fs=1/rx_sample_period, return_onesided=False)
-                
-                axs[1].plot(f_axis, spectrum, '.')
-                print('max power at {:.3f} +/- {:.3f} MHz'.format(f_axis[np.argmax(spectrum)], f_axis[11]-f_axis[10]))
-                for ax in axs:
-                    ax.grid(True)
-                # plt.show()
-
         if True:
-            raw_grad_data = bytearray(4096 * 2)
+            raw_grad_data_x = bytearray(8192)
             
             for k in range(100):
                 # Ramp from min. to max. voltage
@@ -136,39 +114,53 @@ class AcquireTest(unittest.TestCase):
                 for k, r in enumerate(dac_data): # 8192//4):
                     assert k < 8192//4, "Too much data for the gradient RAM"
                     n = 4 * k
-                    val = 0x00100000 | (r << 4) ;
-                    raw_grad_data[n] = val & 0xff;
-                    raw_grad_data[n+1] = (val >> 8) & 0xff;
-                    raw_grad_data[n+2] = (val >> 16) & 0xff;
-                    raw_grad_data[n+3] = (val >> 24) & 0xff;
+                    val = 0x00100000 | (r << 4)
+                    raw_grad_data_x[n] = val & 0xff
+                    raw_grad_data_x[n+1] = (val >> 8) & 0xff
+                    raw_grad_data_x[n+2] = (val >> 16) & 0xff
+                    raw_grad_data_x[n+3] = (val >> 24) & 0xff
                     
-                    # raw_grad_data[n+4] = val2 & 0xff;
-                    # raw_grad_data[n+5] = (val2 >> 8) & 0xff;
-                    # raw_grad_data[n+6] = (val2 >> 16) & 0xff;
-                    # raw_grad_data[n+7] = (val2 >> 24) & 0xff;
+                    # raw_grad_data_x[n+4] = val2 & 0xff;
+                    # raw_grad_data_x[n+5] = (val2 >> 8) & 0xff;
+                    # raw_grad_data_x[n+6] = (val2 >> 16) & 0xff;
+                    # raw_grad_data_x[n+7] = (val2 >> 24) & 0xff;
+
+                # direct way of doing the above for loop
+                raw_gd = np.zeros(2048, dtype=np.uint32)
+                raw_gd[:dac_data.size] = (dac_data.astype(np.uint32) << 4) | 0x00100000
 
                 # # OLD, but needed to initialise the DACs somehow
                 if True:
-                    val = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4) ;
-                    val2 = 0x00200002;
+                    val = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4)
+                    val2 = 0x00200002
 
-                    raw_grad_data[0] = val & 0xff;
-                    raw_grad_data[1] = (val >> 8) & 0xff;
-                    raw_grad_data[2] = (val >> 16) & 0xff;
-                    raw_grad_data[3] = (val >> 24) & 0xff;
+                    raw_grad_data_x[0] = val & 0xff
+                    raw_grad_data_x[1] = (val >> 8) & 0xff
+                    raw_grad_data_x[2] = (val >> 16) & 0xff
+                    raw_grad_data_x[3] = (val >> 24) & 0xff
 
-                    raw_grad_data[4] = val2 & 0xff;
-                    raw_grad_data[5] = (val2 >> 8) & 0xff;
-                    raw_grad_data[6] = (val2 >> 16) & 0xff;
-                    raw_grad_data[7] = (val2 >> 24) & 0xff;                    
+                    raw_grad_data_x[4] = val2 & 0xff
+                    raw_grad_data_x[5] = (val2 >> 8) & 0xff
+                    raw_grad_data_x[6] = (val2 >> 16) & 0xff
+                    raw_grad_data_x[7] = (val2 >> 24) & 0xff
 
+                # direct way of doing the above (only 1st element)
+                raw_gd[0] = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4)
+                raw_gd[1] = 0x00200002
+
+                ## Extend X data to Y, Z, Z2
+                raw_grad_data = np.empty(8192, dtype=np.uint32)
+                raw_grad_data[0::4] = raw_gd # channel 0
+                raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
+                raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
+                raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
+                    
                 # number of samples acquired will determine how long the actual sequence runs for, both RF and gradients,
                 # since the processor is put into the reset state by the server once acquisition is complete
-                packet = construct_packet({'acq': 5000, 
-                                           'grad_mem_x': raw_grad_data,
-                                           'grad_mem_y': raw_grad_data,
-                                           'grad_mem_z': raw_grad_data,
-                                           'grad_mem_z2': raw_grad_data
+                packet = construct_packet({'acq': 5000,
+                                           'grad_mem': raw_grad_data.tobytes(),
+                                           # 'grad_div': (107, 10)
+                                           'grad_div': (15, 1)
                                            })
                 reply = send_packet(packet, self.s)
 
@@ -181,7 +173,25 @@ class AcquireTest(unittest.TestCase):
                         for k in reply[5][sti]:
                             print(k)
                     except KeyError:
-                        pass                    
+                        pass
+
+                if False and k == 1: # plot acquired data
+                        # mkr = '-'
+                        mkr = '.'
+                        fig, axs = plt.subplots(2,1)
+                        axs[0].plot(data.real, '.')
+                        axs[0].plot(data.imag, '.')                
+
+                        # N = data.size
+                        # f_axis = fft.fftfreq(N, d=rx_sample_period)[:N//2]
+                        # spectrum = np.abs(fft.fft(sig.detrend(data)))[:N//2]
+                        f_axis, spectrum = sig.welch(data, fs=1/rx_sample_period, return_onesided=False)
+
+                        axs[1].plot(f_axis, spectrum, '.')
+                        print('max power at {:.3f} +/- {:.3f} MHz'.format(f_axis[np.argmax(spectrum)], f_axis[11]-f_axis[10]))
+                        for ax in axs:
+                            ax.grid(True)
+                        plt.show()                                        
                 
         if False:
             # ramp the x gradient voltage offset
@@ -202,13 +212,17 @@ class AcquireTest(unittest.TestCase):
                         for k in reply[5][sti]:
                             print(k)
                     except KeyError:
-                        pass                    
+                        pass
                 
             # for k in range(3):
             #     reply = send_packet(packet, self.s)
             #     acquired_data_raw = reply[4]['acq']
             #     data = np.frombuffer(acquired_data_raw, np.complex64)        
 
+        # acquired_data_raw = reply[4]['acq']
+        # data = np.frombuffer(acquired_data_raw, np.complex64)
+        # data = np.frombuffer(acquired_data_raw, np.uint64) # ONLY FOR DEBUGGING THE FIFO 
+            
         if False:
             self.assertEqual(reply[:4], [reply_pkt, 1, 0, version_full])
             self.assertEqual(len(acquired_data_raw), samples*8)

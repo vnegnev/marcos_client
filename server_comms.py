@@ -3,8 +3,8 @@
 import msgpack
 
 version_major = 0
-version_minor = 0
-version_debug = 8
+version_minor = 2
+version_debug = 0
 version_full = (version_major << 16) | (version_minor << 8) | version_debug
 
 request_pkt = 0
