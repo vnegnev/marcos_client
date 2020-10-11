@@ -101,7 +101,7 @@ class ServerTest(unittest.TestCase):
 
     def test_several_okay(self):
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                   'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
+                                   'tx_div': 10,
                                    'rx_div': 250,
                                    'tx_size': 32767,
                                    'raw_tx_data': b"0000000000000000"*4096,
@@ -110,21 +110,27 @@ class ServerTest(unittest.TestCase):
                                    'grad_mem': b"0000"*8192,
         })
         reply = send_packet(packet, self.s)
+
+        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
+        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
+        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
+        
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': 0, 'rx_div': 0,
                            'tx_size': 0, 'raw_tx_data': 0, 'grad_div': 0, 'grad_ser': 0,
                            'grad_mem': 0},
                           {'infos': [
-                              'true RX freq: 13.440000 MHz',
-                              'TX sample duration: 0.081380 us',
+                              'true RX freq: {:s} MHz'.format(true_rx_freq),
+                              'TX sample duration: {:s} us'.format(tx_sample_duration),
+                              'true RF amp: 12.207218',
                               'tx data bytes copied: 65536']}]
         )
 
     def test_several_some_bad(self):
         # first, send a normal packet to ensure everything's in a known state
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
+                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq, 80ns for 125
                                     'rx_div': 250,
                                     'raw_tx_data': b"0123456789abcdef"*4096
         })
@@ -132,7 +138,7 @@ class ServerTest(unittest.TestCase):
 
         # Now, try sending with some issues
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                   'tx_div': 100000, # 813.8us sampling for 122.88 clock freq
+                                   'tx_div': 100000, # 813.8us sampling for 122.88 clock freq, 800us for 125
                                    'rf_amp': 100, # TODO: make a test where this is too large
                                    'rx_rate': 32767,
                                    'tx_size': 65535,
@@ -140,7 +146,11 @@ class ServerTest(unittest.TestCase):
                                    'recomp_pul': False,
                                    'raw_tx_data': b"0123456789abcdef"*4097})
         reply = send_packet(packet, self.s)
-        # st()
+
+        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
+        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
+        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
+        
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'rx_rate': -1, 'tx_size': -1, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
@@ -149,7 +159,9 @@ class ServerTest(unittest.TestCase):
                                       'too much raw TX data'],
                            'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
                                         'recomp_pul requested but set to false; doing nothing'],
-                           'infos': ['true RX freq: 13.440000 MHz', 'TX sample duration: 0.081380 us', 'true RF amp: 0.152590']}])
+                           'infos': ['true RX freq: {:s} MHz'.format(true_rx_freq),
+                                     'TX sample duration: {:s} us'.format(tx_sample_duration),
+                                     'true RF amp: 0.152590']}])
 
     def test_gradient_mem(self):
         channels = ( 'x', 'y', 'z', 'z2')
@@ -180,15 +192,6 @@ class ServerTest(unittest.TestCase):
                               {'grad_mem_{:s}'.format(c): -1},
                               {'errors': ['too much grad mem {:s} data: {:d} bytes > {:d}'.format(c, grad_mem_bytes + 1, grad_mem_bytes)] }
                              ])
-
-        # ensure that Z2 is not yet implemented
-        packet = construct_packet({'grad_mem_z2' : raw_data})
-        reply = send_packet(packet, self.s)
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full,
-                          {'grad_mem_z2': -1},
-                          {'errors': ['grad_mem_z2 not yet implemented'] }
-                         ])
 
     def test_acquire_simple(self):
         # For comprehensive test, see test_acquire.py
