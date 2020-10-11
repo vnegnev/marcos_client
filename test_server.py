@@ -26,27 +26,35 @@ class ServerTest(unittest.TestCase):
         self.s.close()
 
     def test_version(self):
-        versions = [ (0,0,0), (0,0,6), (0,1,100), (0,1,255), (1,5,7), (255,255,255) ]
-        statuses = [
-            {'infos': ['Client version 0.0.0 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
-             'errors': ['not all client commands were understood']},
-            {'infos': ['Client version 0.0.6 differs slightly from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
-             'errors': ['not all client commands were understood']},
-            {'warnings': ['Client version 0.1.100 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
-             'errors': ['not all client commands were understood']},
-            {'warnings': ['Client version 0.1.255 different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug)],
-             'errors': ['not all client commands were understood']},
-            {'errors': ['Client version 1.5.7 significantly different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug),
-                        'not all client commands were understood']},
-            {'errors': ['Client version 255.255.255 significantly different from server version {:d}.{:d}.{:d}'.format(version_major, version_minor, version_debug),
-                        'not all client commands were understood']}
-        ]
+        versions = [ (0,2,0), (0,2,6), (0,3,100), (0,3,255), (1,5,7), (255,255,255) ]
+
+        def diff_info(client_ver):
+            return {'infos': ['Client version {:d}.{:d}.{:d}'.format(*client_ver) +
+                              ' differs slightly from server version {:d}.{:d}.{:d}'.format(
+                                  version_major, version_minor, version_debug)],
+             'errors': ['not all client commands were understood']}
+
+        def diff_warning(client_ver):
+            return {'warnings': ['Client version {:d}.{:d}.{:d}'.format(*client_ver) +
+                              ' different from server version {:d}.{:d}.{:d}'.format(
+                                  version_major, version_minor, version_debug)],
+             'errors': ['not all client commands were understood']}
+
+        def diff_error(client_ver):
+            return {'errors': ['Client version {:d}.{:d}.{:d}'.format(*client_ver) +
+                              ' significantly different from server version {:d}.{:d}.{:d}'.format(
+                                  version_major, version_minor, version_debug),
+                               'not all client commands were understood']}
         
-        for v, ss in zip(versions, statuses):
+        # results = 
+        expected_outcomes = [diff_info, diff_info, diff_warning, diff_warning, diff_error, diff_error]
+        
+        for v, ee in zip(versions, expected_outcomes):
             packet = construct_packet({'asdfasdf':1}, self.packet_idx, version=v)
             reply = send_packet(packet, self.s)
             self.assertEqual(reply,
-                             [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1}, ss])
+                             [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1},
+                              ee(v)])
 
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
@@ -94,21 +102,22 @@ class ServerTest(unittest.TestCase):
     def test_several_okay(self):
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
-                                   'rf_amp': 8000,
-                                   'rx_rate': 250,
-                                   'tx_size': 250,
-                                   'tx_samples': 40,
-                                   'recomp_pul': True,
-                                   'raw_tx_data': b"0123456789abcdef"*4096
+                                   'rx_div': 250,
+                                   'tx_size': 32767,
+                                   'raw_tx_data': b"0000000000000000"*4096,
+                                   'grad_div': (303, 32),
+                                   'grad_ser': 1,
+                                   'grad_mem': b"0000"*8192,
         })
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'lo_freq': 0, 'tx_div': 0, 'rf_amp': 0, 'rx_rate': 0, 'tx_size': 0, 'tx_samples': 0, 'recomp_pul': 0, 'raw_tx_data': 0},
+                          {'lo_freq': 0, 'tx_div': 0, 'rx_div': 0,
+                           'tx_size': 0, 'raw_tx_data': 0, 'grad_div': 0, 'grad_ser': 0,
+                           'grad_mem': 0},
                           {'infos': [
                               'true RX freq: 13.440000 MHz',
                               'TX sample duration: 0.081380 us',
-                              'true RF amp: 12.207218',
                               'tx data bytes copied: 65536']}]
         )
 
@@ -116,11 +125,7 @@ class ServerTest(unittest.TestCase):
         # first, send a normal packet to ensure everything's in a known state
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                     'tx_div': 10, # 81.38ns sampling for 122.88 clock freq
-                                    'rf_amp': 8000,
-                                    'rx_rate': 250,
-                                    'tx_size': 250,                                    
-                                    'tx_samples': 40,
-                                    'recomp_pul': True,
+                                    'rx_div': 250,
                                     'raw_tx_data': b"0123456789abcdef"*4096
         })
         send_packet(packetp, self.s)        
@@ -224,7 +229,7 @@ def throughput_test(s):
     packet_idx = 0
 
     for k in range(7):
-        msg = msgpack.packb(construct_packet({'test_throughput': 10**k}))
+        msg = msgpack.packb(construct_packet({'test_server_throughput': 10**k}))
 
         process(send_msg(msg, s))
         packet_idx += 2
