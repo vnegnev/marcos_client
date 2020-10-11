@@ -66,12 +66,12 @@ class ServerTest(unittest.TestCase):
                          
 
     
-    def test_throughput(self):
-        packet = construct_packet({'test_throughput':10}, self.packet_idx)
+    def test_net(self):
+        packet = construct_packet({'test_net':10}, self.packet_idx)
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'test_throughput':
+                          {'test_net':
                            {'array1': [0.0, 1.01, 2.02, 3.0300000000000002, 4.04, 5.05, 6.0600000000000005, 7.07, 8.08, 9.09],
                             'array2': [10.1, 11.11, 12.120000000000001, 13.13, 14.14, 15.15, 16.16, 17.17, 18.18, 19.19]}}, {}]
         )
@@ -80,10 +80,10 @@ class ServerTest(unittest.TestCase):
             with self.subTest(i=k):
                 ke = 10**k
                 kf = ke - 1
-                packet = construct_packet({'test_throughput': ke}, self.packet_idx)
+                packet = construct_packet({'test_net': ke}, self.packet_idx)
                 reply = send_packet(packet, self.s)
-                self.assertAlmostEqual(reply[4]['test_throughput']['array1'][-1], 1.01 * kf)
-                self.assertAlmostEqual(reply[4]['test_throughput']['array2'][-1], 1.01 * (kf+10) )
+                self.assertAlmostEqual(reply[4]['test_net']['array1'][-1], 1.01 * kf)
+                self.assertAlmostEqual(reply[4]['test_net']['array2'][-1], 1.01 * (kf+10) )
 
     def test_fpga_clk(self):
         packet = construct_packet({'fpga_clk': [0xdf0d, 0x03f03f30, 0x00100700]})
@@ -108,7 +108,7 @@ class ServerTest(unittest.TestCase):
                                    'grad_div': (303, 32),
                                    'grad_ser': 1,
                                    'grad_mem': b"0000"*8192,
-        })
+                                   })
         reply = send_packet(packet, self.s)
 
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
@@ -123,8 +123,8 @@ class ServerTest(unittest.TestCase):
                           {'infos': [
                               'true RX freq: {:s} MHz'.format(true_rx_freq),
                               'TX sample duration: {:s} us'.format(tx_sample_duration),
-                              'true RF amp: 12.207218',
-                              'tx data bytes copied: 65536']}]
+                              'tx data bytes copied: 65536',
+                              'gradient mem data bytes copied: 32768']}]
         )
 
     def test_several_some_bad(self):
@@ -132,19 +132,21 @@ class ServerTest(unittest.TestCase):
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                     'tx_div': 10, # 81.38ns sampling for 122.88 clock freq, 80ns for 125
                                     'rx_div': 250,
-                                    'raw_tx_data': b"0123456789abcdef"*4096
+                                    'raw_tx_data': b"0000000000000000"*4096
         })
-        send_packet(packetp, self.s)        
+        send_packet(packetp, self.s)
 
         # Now, try sending with some issues
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                   'tx_div': 100000, # 813.8us sampling for 122.88 clock freq, 800us for 125
-                                   'rf_amp': 100, # TODO: make a test where this is too large
-                                   'rx_rate': 32767,
+                                   'tx_div': 100000,
+                                   'rx_div': 32767,
                                    'tx_size': 65535,
-                                   'tx_samples': 40,
-                                   'recomp_pul': False,
-                                   'raw_tx_data': b"0123456789abcdef"*4097})
+                                   'raw_tx_data': b"0123456789abcdef"*4097,
+                                   'grad_div': (1024, 0),
+                                   'grad_ser': 16,
+                                   'grad_mem': b"0000"*8193,
+                                   })
+        
         reply = send_packet(packet, self.s)
 
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
@@ -153,45 +155,45 @@ class ServerTest(unittest.TestCase):
         
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'lo_freq': 0, 'tx_div': -2, 'rf_amp': 0, 'rx_rate': -1, 'tx_size': -1, 'tx_samples': 0, 'recomp_pul': -2, 'raw_tx_data': -1},
-                          {'errors': ['RX rate outside the range [25, 8192]; check your settings',
+                          {'lo_freq': 0, 'tx_div': -2, 'rx_div': -1, 'tx_size': -1, 'raw_tx_data': -1, 'grad_div': -1, 'grad_ser': -1, 'grad_mem': -1},
+                          {'errors': ['RX divider outside the range [25, 8192]; check your settings',
                                       'TX size outside the range [1, 32767]; check your settings',
-                                      'too much raw TX data'],
+                                      'too much raw TX data',
+                                      'grad SPI clock divider outside the range [1, 63]; check your settings',
+                                      'serialiser enables outside the range [0, 0xf], check your settings',
+                                      'too much grad mem data: 32772 bytes > 32768'],
                            'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
-                                        'recomp_pul requested but set to false; doing nothing'],
+                                        ],
                            'infos': ['true RX freq: {:s} MHz'.format(true_rx_freq),
                                      'TX sample duration: {:s} us'.format(tx_sample_duration),
-                                     'true RF amp: 0.152590']}])
+                                     ]}])
 
     def test_gradient_mem(self):
-        channels = ( 'x', 'y', 'z', 'z2')
-        grad_mem_bytes = 2 * 4096
+        grad_mem_bytes = 4 * 8192
 
         # everything should be fine
-        for k, c in enumerate(channels):
-            raw_data = bytearray(grad_mem_bytes)
-            for m in range(grad_mem_bytes):
-                raw_data[m] = k + 10; # i.e. it'll be filled with 'a', 'b', 'c', ...
-            packet = construct_packet({'grad_mem_{:s}'.format(c) : raw_data})
-            reply = send_packet(packet, self.s)
-            self.assertEqual(reply,
-                             [reply_pkt, 1, 0, version_full,
-                              {'grad_mem_{:s}'.format(c): 0},
-                              {'infos': ['gradient mem {:s} data bytes copied: {:d}'.format(c, grad_mem_bytes)] }
-                              ])
+        raw_data = bytearray(grad_mem_bytes)
+        for m in range(grad_mem_bytes):
+            raw_data[m] = m & 0xff
+        packet = construct_packet({'grad_mem' : raw_data})
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'grad_mem': 0},
+                          {'infos': ['gradient mem data bytes copied: {:d}'.format(grad_mem_bytes)] }
+                          ])
 
         # a bit too much data
-        for k, c in enumerate(channels):
-            raw_data = bytearray(grad_mem_bytes + 1)
-            for m in range(grad_mem_bytes + 1):
-                raw_data[m] = k + 10; # i.e. it'll be filled with 'a', 'b', 'c', ...
-            packet = construct_packet({'grad_mem_{:s}'.format(c) : raw_data})
-            reply = send_packet(packet, self.s)
-            self.assertEqual(reply,
-                             [reply_pkt, 1, 0, version_full,
-                              {'grad_mem_{:s}'.format(c): -1},
-                              {'errors': ['too much grad mem {:s} data: {:d} bytes > {:d}'.format(c, grad_mem_bytes + 1, grad_mem_bytes)] }
-                             ])
+        raw_data = bytearray(grad_mem_bytes + 1)
+        for m in range(grad_mem_bytes):
+            raw_data[m] = m & 0xff
+        packet = construct_packet({'grad_mem' : raw_data})
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'grad_mem': -1},
+                          {'errors': ['too much grad mem data: {:d} bytes > {:d}'.format(grad_mem_bytes + 1, grad_mem_bytes)] }
+                          ])        
 
     def test_acquire_simple(self):
         # For comprehensive test, see test_acquire.py
@@ -221,8 +223,8 @@ class ServerTest(unittest.TestCase):
                          [reply, 1, 0, version_full, {'configure_hw': 3}, {}]
         )
 
-    @unittest.skip("should only be executed manually")
-    def test_exit(self):
+    @unittest.skip("comment this line out to shut down the server after testing")
+    def test_zzz_exit(self): # last in alphabetical order
         packet = construct_packet( {}, 0, command=close_server_pkt)
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
