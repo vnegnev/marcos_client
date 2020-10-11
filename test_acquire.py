@@ -159,8 +159,11 @@ class AcquireTest(unittest.TestCase):
                 # since the processor is put into the reset state by the server once acquisition is complete
                 packet = construct_packet({'acq': 5000,
                                            'grad_mem': raw_grad_data.tobytes(),
+                                           'grad_ser': 0x3,
+                                           # 'grad_div': (307, 30)
+                                           'grad_div': (150, 3)
                                            # 'grad_div': (107, 10)
-                                           'grad_div': (15, 1)
+                                           # 'grad_div': (15, 1)
                                            })
                 reply = send_packet(packet, self.s)
 
