@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port
+from local_config import ip_address, port, fpga_clk_freq_MHz
 from server_comms import *
 
 class ServerTest(unittest.TestCase):

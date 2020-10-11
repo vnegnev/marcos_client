@@ -1,3 +1,10 @@
-# ip_address = "localhost"
-ip_address = "192.168.1.189"
+## IP address: RP address or 'localhost' if emulating a local server
+#ip_address = "localhost"
+#ip_address = "192.168.1.189"
+
+## Port: always 11111 for now
 port = 11111
+
+## FPGA clock frequency: uncomment one of the below to configure various system behaviour
+#fpga_clk_freq_MHz = 122.88 # RP-122
+#fpga_clk_freq_MHz = 122.88 # RP-125

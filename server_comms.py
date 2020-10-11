@@ -12,8 +12,6 @@ emergency_stop_pkt = 1
 close_server_pkt = 2
 reply_pkt = 128
 
-fpga_clk_freq_MHz = 125
-
 def construct_packet(data, packet_idx=0, command=request_pkt, version=(version_major, version_minor, version_debug)):
     vma, vmi, vd = version
     assert vma < 256 and vmi < 256 and vd < 256, "Version is too high for a byte!"
