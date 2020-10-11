@@ -8,7 +8,7 @@ import scipy.signal as sig
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port, fpga_clk_freq_MHz
+from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 from server_comms import *
 
 class AcquireTest(unittest.TestCase):
@@ -64,17 +64,14 @@ class AcquireTest(unittest.TestCase):
         # compute pulse sequence
         from ocra_lib.assembler import Assembler
         ass = Assembler()
-        sequence_byte_array = ass.assemble("ocra_lib/se_default_vn.txt") # no samples appear since no acquisition takes place
+        sequence_byte_array = ass.assemble("ocra_lib/gpa_test.txt") # no samples appear since no acquisition takes place
         # sequence_byte_array = ass.assemble("ocra_lib/se_default.txt")        
         
         packet = construct_packet({# 'lo_freq': 0x8000000,
             'lo_freq': int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf,
             'tx_div': divisor - 1,
-            'rx_rate': sampling_divisor,
+            'rx_div': sampling_divisor,
             'tx_size': 32767,
-            #'rf_amp': rf_amp,
-            #'tx_samples': 1,
-            # 'recomp_pul': True,
             'raw_tx_data': raw_tx_data,
             # 'acq': samples,
             'seq_data': sequence_byte_array
@@ -93,75 +90,71 @@ class AcquireTest(unittest.TestCase):
             
             for k in range(100):
                 # Ramp from min. to max. voltage
-                ramp_samples = 90
+                ramp_samples = 100
                 ramp = np.linspace(-1, 1, ramp_samples) # between -1 and 1, which are the DAC output full-scale limits (NOT voltage)
-                ramp[0] = 1 # peak at the start
 
                 # Sine wave
-                sine_samples = 200
+                sine_samples = 201
                 cycles = 5
                 sine_arg = np.linspace(0, 2*np.pi*cycles, sine_samples) 
                 sine = np.sin(sine_arg) * np.exp(-sine_arg/10)
 
                 # Concatenate
                 dac_waveform = np.hstack([ramp, sine])
+                dac_waveform[0] = 1
+                dac_waveform[299] = 1
+                dac_waveform[300] = 0
                 
                 # np.uint16: actually it needs to be a 16-bit 2's
                 # complement signed int, but Python tracks the sign
                 # independently from the value which complicates the
                 # bitwise arithmetic in the for loop below
                 dac_data = np.round(dac_waveform * 32767).astype(np.uint16)
-                for k, r in enumerate(dac_data): # 8192//4):
-                    assert k < 8192//4, "Too much data for the gradient RAM"
-                    n = 4 * k
-                    val = 0x00100000 | (r << 4)
-                    raw_grad_data_x[n] = val & 0xff
-                    raw_grad_data_x[n+1] = (val >> 8) & 0xff
-                    raw_grad_data_x[n+2] = (val >> 16) & 0xff
-                    raw_grad_data_x[n+3] = (val >> 24) & 0xff
+
+                ## ocra1 data
+                if grad_board == "ocra1":
+                    raw_gd = np.zeros(2048, dtype=np.uint32)
+                    raw_gd[:dac_data.size] = (dac_data.astype(np.uint32) << 4) | 0x00100000
+
+                    # direct way of doing the init (only 1st element)
+                    raw_gd[0] = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4)
+                    raw_gd[1], raw_gd[2], raw_gd[3] = raw_gd[0], raw_gd[0], raw_gd[0]
+                    raw_gd[4] = 0x00200002
+                    raw_gd[5], raw_gd[6], raw_gd[7] = raw_gd[4], raw_gd[4], raw_gd[4]
+
+                    ## Extend X data to Y, Z, Z2
+                    raw_grad_data = np.empty(8192, dtype=np.uint32)
+                    raw_grad_data[0::4] = raw_gd # channel 0
+                    raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
+                    raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
+                    raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
+                elif grad_board == "gpa-fhdo":
+                    raw_gd = np.ones(2048, dtype=np.uint32) * 0x8000
+                    # raw_gd[0] = 0x00000f
+                    raw_gd[0] = 0x030100 # init
+                    raw_gd[1:dac_data.size+1] = (dac_data + (1 << 15)).astype(np.uint32)
                     
-                    # raw_grad_data_x[n+4] = val2 & 0xff;
-                    # raw_grad_data_x[n+5] = (val2 >> 8) & 0xff;
-                    # raw_grad_data_x[n+6] = (val2 >> 16) & 0xff;
-                    # raw_grad_data_x[n+7] = (val2 >> 24) & 0xff;
+                    # raw_gd[0] = 0x111111 # init
+                    # raw_gd[0] = 0x000000
+                    # raw_gd[1:8] = [0x2000, 0x4000, 0x6000, 0xffff, 0x5000, 0x4000, 0x0000]
+                    # raw_gd[8:] = np.tile(raw_gd[0:8], 255)
 
-                # direct way of doing the above for loop
-                raw_gd = np.zeros(2048, dtype=np.uint32)
-                raw_gd[:dac_data.size] = (dac_data.astype(np.uint32) << 4) | 0x00100000
-
-                # # OLD, but needed to initialise the DACs somehow
-                if True:
-                    val = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4)
-                    val2 = 0x00200002
-
-                    raw_grad_data_x[0] = val & 0xff
-                    raw_grad_data_x[1] = (val >> 8) & 0xff
-                    raw_grad_data_x[2] = (val >> 16) & 0xff
-                    raw_grad_data_x[3] = (val >> 24) & 0xff
-
-                    raw_grad_data_x[4] = val2 & 0xff
-                    raw_grad_data_x[5] = (val2 >> 8) & 0xff
-                    raw_grad_data_x[6] = (val2 >> 16) & 0xff
-                    raw_grad_data_x[7] = (val2 >> 24) & 0xff
-
-                # direct way of doing the above (only 1st element)
-                raw_gd[0] = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4)
-                raw_gd[1] = 0x00200002
-
-                ## Extend X data to Y, Z, Z2
-                raw_grad_data = np.empty(8192, dtype=np.uint32)
-                raw_grad_data[0::4] = raw_gd # channel 0
-                raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
-                raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
-                raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
+                    ## Extend X data to Y, Z, Z2
+                    raw_grad_data = np.empty(8192, dtype=np.uint32)
+                    raw_grad_data[0::4] = raw_gd # channel 0
+                    raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
+                    raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
+                    raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
                     
                 # number of samples acquired will determine how long the actual sequence runs for, both RF and gradients,
                 # since the processor is put into the reset state by the server once acquisition is complete
-                packet = construct_packet({'acq': 5000,
+                packet = construct_packet({'acq': 520,
                                            'grad_mem': raw_grad_data.tobytes(),
-                                           'grad_ser': 0x3,
-                                           # 'grad_div': (307, 30)
-                                           'grad_div': (150, 3)
+                                           'grad_ser': 0x2,
+                                           # 'grad_div': (1022, 63), # slowest rate, for basic testing
+                                           # 'grad_div': (1022, 6) # slowest interval, fastest working SPI on gpa-fhdo board with 1.5m Ethernet cable
+                                           'grad_div': (180, 6) # fastest sustained 4-channel update settings
+                                           # 'grad_div': (150, 3)
                                            # 'grad_div': (107, 10)
                                            # 'grad_div': (15, 1)
                                            })
