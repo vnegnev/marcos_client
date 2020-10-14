@@ -94,16 +94,19 @@ class AcquireTest(unittest.TestCase):
                 ramp = np.linspace(-1, 1, ramp_samples) # between -1 and 1, which are the DAC output full-scale limits (NOT voltage)
 
                 # Sine wave
-                sine_samples = 201
+                sine_samples = 203
                 cycles = 5
                 sine_arg = np.linspace(0, 2*np.pi*cycles, sine_samples) 
                 sine = np.sin(sine_arg) * np.exp(-sine_arg/10)
 
                 # Concatenate
                 dac_waveform = np.hstack([ramp, sine])
-                dac_waveform[0] = 1
-                dac_waveform[299] = 1
+                dac_waveform[0] = 0
+                dac_waveform[1] = 1
+                dac_waveform[299] = 0
                 dac_waveform[300] = 0
+                dac_waveform[301] = 1
+                dac_waveform[302] = 0                
                 
                 # np.uint16: actually it needs to be a 16-bit 2's
                 # complement signed int, but Python tracks the sign
@@ -113,14 +116,16 @@ class AcquireTest(unittest.TestCase):
 
                 ## ocra1 data
                 if grad_board == "ocra1":
+                    grad_core_select = 0x1
+                    
                     raw_gd = np.zeros(2048, dtype=np.uint32)
                     raw_gd[:dac_data.size] = (dac_data.astype(np.uint32) << 4) | 0x00100000
 
                     # direct way of doing the init (only 1st element)
-                    raw_gd[0] = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4)
-                    raw_gd[1], raw_gd[2], raw_gd[3] = raw_gd[0], raw_gd[0], raw_gd[0]
-                    raw_gd[4] = 0x00200002
-                    raw_gd[5], raw_gd[6], raw_gd[7] = raw_gd[4], raw_gd[4], raw_gd[4]
+                    raw_gd[0] = 0x00200002
+                    # raw_gd[1] = 0x00100000 | (((k * 655 - 32768) & 0xffff) << 4) # slowly-rising peak as the outer loop continues
+                    # raw_gd[1], raw_gd[2], raw_gd[3] = raw_gd[0], raw_gd[0], raw_gd[0]
+                    # raw_gd[5], raw_gd[6], raw_gd[7] = raw_gd[4], raw_gd[4], raw_gd[4]
 
                     ## Extend X data to Y, Z, Z2
                     raw_grad_data = np.empty(8192, dtype=np.uint32)
@@ -128,7 +133,10 @@ class AcquireTest(unittest.TestCase):
                     raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
                     raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
                     raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
+
                 elif grad_board == "gpa-fhdo":
+                    grad_core_select = 0x2
+                    
                     raw_gd = np.ones(2048, dtype=np.uint32) * 0x8000
                     # raw_gd[0] = 0x00000f
                     raw_gd[0] = 0x030100 # init
@@ -145,31 +153,34 @@ class AcquireTest(unittest.TestCase):
                     raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
                     raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
                     raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
-                    
+
                 # number of samples acquired will determine how long the actual sequence runs for, both RF and gradients,
                 # since the processor is put into the reset state by the server once acquisition is complete
                 packet = construct_packet({'acq': 520,
                                            'grad_mem': raw_grad_data.tobytes(),
-                                           'grad_ser': 0x2,
+                                           'grad_ser': grad_core_select,
                                            # 'grad_div': (1022, 63), # slowest rate, for basic testing
                                            # 'grad_div': (1022, 6) # slowest interval, fastest working SPI on gpa-fhdo board with 1.5m Ethernet cable
-                                           'grad_div': (180, 6) # fastest sustained 4-channel update settings
+                                           # 'grad_div': (189, 6) # fastest sustained 4-channel update settings on gpa-fhdo
                                            # 'grad_div': (150, 3)
                                            # 'grad_div': (107, 10)
-                                           # 'grad_div': (15, 1)
+                                           'grad_div': (9, 1) # fastest sustained 4-channel update settings on ocra1
                                            })
                 reply = send_packet(packet, self.s)
 
                 acquired_data_raw = reply[4]['acq']
                 data = np.frombuffer(acquired_data_raw, np.complex64)
-                # time.sleep(0.1)
+                return_status = reply[5]
 
                 for sti in ('infos','warnings','errors'):
                     try:
-                        for k in reply[5][sti]:
+                        for k in return_status[sti]:
                             print(k)
                     except KeyError:
                         pass
+
+                assert 'errors' not in reply[5], reply[5]['errors'][0]
+                    
 
                 if False and k == 1: # plot acquired data
                         # mkr = '-'
