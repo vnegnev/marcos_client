@@ -10,8 +10,28 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
   - Clone the repo and copy =local_config.py.example= to =local_config.py=.
   
-  - Edit =local_config.py= to suit your network setup.
+  - Edit =local_config.py= to suit your network and hardware setup.
 
-  - Run =test_client.py= and make sure no errors are returned.
+  - Run =test_server.py= and make sure no errors are returned.
 
-  - Run =marcos.py= for the GUI.
+  - Run =test_acquire.py= to test the hardware in a basic acquisition.
+
+  - Run =test_experiment.py= to test the experiment API.
+
+  - Import experiment.py in your higher-level MRI scripts.
+
+* File description
+
+  experiment.py : basic API for controlling the MaRCoS server
+
+  experiment_examples.py : examples of how to use experiment.py
+
+  local_config.py.example : template file for local configuration; create a copy and name it local_config.py to configure your local setup
+
+  ocra_lib/ : files relating to the OCRA assembler and various assembly scripts (taken from the main ocra repository)
+
+  server_comms.py : low-level communication library for the MaRCoS server; use if you wish to write your own API
+
+  test_acquire.py : haphazard collection of tests and miscellaneous data-processing operations, used for preliminary testing of server features before they make it into the API or test_server.py
+
+  test_server.py : unit tests to verify the correct version and operation of the MaRCoS server

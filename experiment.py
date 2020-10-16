@@ -60,8 +60,11 @@ class Experiment:
                  instruction_file=None,
                  grad_t=2.5, # us, best-effort
                  grad_channels=4,
-                 spi_freq=None,
-                 local_grad_board=grad_board): # MHz, best-effort):
+                 spi_freq=None, # MHz, best-effort
+                 local_grad_board=grad_board,
+                 print_infos=True, # show server info messages
+                 assert_errors=True, # halt on errors
+                 ):
         self.samples = samples
 
         self.lo_freq_bin = int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
@@ -81,73 +84,88 @@ class Experiment:
         
         ### Set the gradient controller properties
         grad_clk_t = 0.007 # 7ns period
-        self.true_grad_div = np.round(grad_t/grad_clk_t).astype(np.int) # true divider value
+        self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
         self.grad_div = self.true_grad_div - 4 # what's sent to server
         self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
+        self.grad_channels = grad_channels
+        assert 0 < grad_channels < 5, "Strange number of grad channels"
 
+        self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
         if spi_freq is not None:
-            self.spi_div = np.floor(1 / (spi_freq*grad_clk_t)).astype(np.int) - 1
+            self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
         else:
             # Auto-decide the SPI freq, to be as low as will work
-            assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
-            if local_grad_board == 'ocra1':
+            assert self.grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
+            if self.grad_board == 'ocra1':
                 # SPI runs in parallel for each channel
                 self.true_spi_div = (self.true_grad_div * grad_channels) // spi_cycles_per_tx
-            elif local_grad_board == 'gpa-fhdo':
+            elif self.grad_board == 'gpa-fhdo':
                 # SPI must be written sequentially for each channel
                 self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
 
-        self.spi_div = self.true_spi_div - 1
+            if self.true_spi_div > 64:
+                self.true_spi_div = 64 # slowest SPI clock possible
 
-        # Segments for RF TX and gradient BRAMs
+        self.spi_div = self.true_spi_div - 1
+        self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
+
+        self.print_infos = print_infos
+        self.assert_errors = assert_errors
+
+        self.clear_tx()
+        self.clear_grad()
+
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.connect( (ip_address, port) )
+
+    def __del__(self):
+        self.s.close()
+
+    def clear_tx(self):
         self.tx_offsets = []
         self.current_tx_offset = 0
-
-        self.grad_offsets = []
-        self.current_grad_offset = 0
+        self.tx_data = np.empty(0)
+        self.tx_data_dirty = True        
 
     def add_tx(self, vec):
         """ vec: complex vector in the I,Q range [-1,1] and [-j,j]; units of full-scale RF DAC output.
         (Note that the magnitude of each element must be <= 1, i.e. np.abs(1+1j) is sqrt(2) and thus too high.)
         
         Returns the index of the relevant vector, which can be used later when the pulse sequence is being compiled.
-        """                
+        """
+        self.tx_data_dirty = True
         self.tx_offsets.append(self.current_tx_offset)
         self.current_tx_offset += vec.size
-        try:
-            self.tx_data = np.hstack( [self.tx_data, vec] )
-        except AttributeError:
-            self.tx_data = vec
+        self.tx_data = np.hstack( [self.tx_data, vec] )
 
         return len(self.tx_offsets) - 1
 
+    def clear_grad(self):
+        self.grad_data = [np.empty(0) for k in range(self.grad_channels)]
+        self.grad_offsets = []
+        self.current_grad_offset = 0
+        self.grad_data_dirty = True
+    
     def add_grad(self, vectors):
         """ vectors: list/tuple of real vectors in the range [-1,1] units of full-scale gradient DAC output. Must have the same number of vectors as grad_channels.
         
-        Returns the index of the relevant vector, which can be used later when the pulse sequence is being compiled.
+        Returns the index of the relevant vectors, which can be used later when the pulse sequence is being compiled.
         """
-                
-
+        self.grad_data_dirty = True
+        assert len(vectors) == self.grad_channels, "One vector required for each gradient channel"
+        vsz = vectors[0].size
+        for v in vectors[1:]:
+            assert v.size == vsz, "Supply equal-length vectors for all the gradients."
                  
-        assert vec_x.size == vec_y.size == vec_z.size, "Supply equal-length vectors for the three gradients."
         self.grad_offsets.append(self.current_grad_offset)
-        self.current_grad_offset += vec_x.size
+        self.current_grad_offset += vsz
 
-        try:
-            self.grad_data_x = np.hstack( [self.grad_data_x, vec_x] )
-        except AttributeError:
-            self.grad_data_x = vec_x
+        if not hasattr(self, 'grad_data'):
+            self.clear_grad()
 
-        try:
-            self.grad_data_y = np.hstack( [self.grad_data_y, vec_y] )
-        except AttributeError:            
-            self.grad_data_y = vec_y
-
-        try:            
-            self.grad_data_z = np.hstack( [self.grad_data_z, vec_z] )
-        except AttributeError:            
-            self.grad_data_z = vec_z
+        for k, v in enumerate(vectors):
+            self.grad_data[k] = np.hstack( [self.grad_data[k], v] )
 
         return len(self.grad_offsets) - 1
 
@@ -165,38 +183,43 @@ class Experiment:
         self.tx_bytes[1::4] = (tx_i >> 8).astype(np.uint8).tobytes()
         self.tx_bytes[2::4] = (tx_q & 0xff).astype(np.uint8).tobytes()
         self.tx_bytes[3::4] = (tx_q >> 8).astype(np.uint8).tobytes()
+        self.tx_data_dirty = False
 
     def compile_grad_data(self):
         """ go through the grad data and prepare binary array to send to the server """
-        if not hasattr(self, 'grad_data_x'):
-            self.grad_data_x, self.grad_data_y, self.grad_data_z, self.grad_data_z2 = np.array([0]), np.array([0]), np.array([0]), np.array([0])
-        self.grad_x_bytes = bytearray(self.grad_data_x.size * 4)
-        self.grad_y_bytes = bytearray(self.grad_data_y.size * 4)
-        self.grad_z_bytes = bytearray(self.grad_data_z.size * 4)
-        for gd in [self.grad_data_x, self.grad_data_y, self.grad_data_z]:
-            if np.any(np.abs(gd) > 1.0):
-                warnings.warn("Grad data too large! Overflow will occur.")
-        
-        grx = np.round(32767 * self.grad_data_x).astype(np.uint16)
-        gry = np.round(32767 * self.grad_data_y).astype(np.uint16)
-        grz = np.round(32767 * self.grad_data_z).astype(np.uint16)        
-        
-        # TODO: check that this makes sense relative to test_acquire,
-        # and find a better way to encode the interleaved bytearray
-        self.grad_x_bytes[::4] = ((grx & 0xf) << 4).astype(np.uint8).tobytes()
-        self.grad_x_bytes[1::4] = ((grx & 0xff0) >> 4).astype(np.uint8).tobytes()
-        self.grad_x_bytes[2::4] = ((grx >> 12) | 0x10).astype(np.uint8).tobytes()
-        self.grad_x_bytes[3::4] = np.zeros(self.grad_data_x.size, dtype=np.uint8).tobytes() # wasted?
+        if not hasattr(self, 'grad_data'):
+            self.grad_data = [np.array([0]) for k in range(self.grad_channels)]
 
-        self.grad_y_bytes[::4] = ((gry & 0xf) << 4).astype(np.uint8).tobytes()
-        self.grad_y_bytes[1::4] = ((gry & 0xff0) >> 4).astype(np.uint8).tobytes()
-        self.grad_y_bytes[2::4] = ((gry >> 12) | 0x10).astype(np.uint8).tobytes()
-        self.grad_y_bytes[3::4] = np.zeros(self.grad_data_y.size, dtype=np.uint8).tobytes() # wasted?
-        
-        self.grad_z_bytes[::4] = ((grz & 0xf) << 4).astype(np.uint8).tobytes()
-        self.grad_z_bytes[1::4] = ((grz & 0xff0) >> 4).astype(np.uint8).tobytes()
-        self.grad_z_bytes[2::4] = ((grz >> 12) | 0x10).astype(np.uint8).tobytes()
-        self.grad_z_bytes[3::4] = np.zeros(self.grad_data_z.size, dtype=np.uint8).tobytes() # wasted?
+        grad_bram_data = np.zeros(self.grad_data[0].size * self.grad_channels, dtype=np.uint32)
+        # bytearray(self.grad_data[0].size * self.grad_channels * 4)
+        for ch, gd in enumerate(self.grad_data):
+            if np.any(np.abs(gd)) > 1.0:
+                warnings.warn("Grad data in Ch {:d} outside [-1,1]!".format(ch))
+
+            if self.grad_board == 'ocra1':
+                # 2's complement
+                # ocra1 16b or 18b -- TODO TEST 18b
+                # gr_dacbits = np.round(32767 * gd).astype(np.uint32) & 0xffff
+                gr_dacbits = np.round(131071 * gd).astype(np.uint32) & 0x3ffff 
+                gr = (gr_dacbits << 2) | 0x00100000
+            elif self.grad_board == 'gpa-fhdo':
+                # Not 2's complement - 0x0 word is -5V, 0xffff is +5V
+                gr_dacbits = np.round(65535 * (gd + 1)).astype(np.uint32) & 0xffff
+                gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
+
+            # always broadcast for the final channel
+            broadcast = ch == self.grad_channels - 1                
+
+            grad_bram_data[ch::self.grad_channels] = gr | (ch << 25) | (broadcast << 24) # interleave data
+
+            ## initialisation words at address 0 (TODO: test them!)
+            if True:
+                if self.grad_board == 'ocra1':
+                    grad_bram_data[ch] = 0x00200002 | (ch << 25) | (broadcast << 24)
+
+        self.grad_bytes = grad_bram_data.tobytes()
+        self.grad_data_dirty = False
+        self.grad_data_unsent = True
 
     def compile_instructions(self):
         # For now quite simple (using the ocra assembler)
@@ -207,45 +230,52 @@ class Experiment:
     def define_instructions(self, instructions):
         self.instructions = instructions
 
-    def compile(self):
-        self.compile_tx_data()
-        self.compile_grad_data()
+    def auto_compile(self):
         self.compile_instructions()
+        if self.tx_data_dirty:
+            self.compile_tx_data()
+        if self.grad_data_dirty:
+            self.compile_grad_data()
 
     def run(self):
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
-        self.compile()
+        self.auto_compile()
         packet = sc.construct_packet({
             'lo_freq': self.lo_freq_bin,
-            'rx_rate': self.rx_div_real,
+            'rx_div': self.rx_div_real,
             'tx_div': self.tx_div,
             'tx_size': self.tx_data.size * 4,
             'raw_tx_data': self.tx_bytes,
-            'grad_mem_x': self.grad_x_bytes,
-            'grad_mem_y': self.grad_y_bytes,
-            'grad_mem_z': self.grad_z_bytes,            
+            'grad_div': (self.grad_div, self.spi_div),
+            'grad_ser': self.grad_ser,
+            'grad_mem': self.grad_bytes,
             'seq_data': self.instructions,
             'acq': self.samples})
-
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.connect( (ip_address, port) )
         
-        reply = sc.send_packet(packet, s)
+        reply = sc.send_packet(packet, self.s)
+
+        return_status = reply[5]
+
+        if self.print_infos:
+            print("Server info:")
+            for k in return_status['infos']:
+                print(k)
 
         try:
-            errors = reply[5]['errors']
-            for err in errors:
-                warnings.warn(err)
+            for k in return_status['warnings']:
+                warnings.warn(k)
         except KeyError:
             pass
 
-        try:
-            warns = reply[5]['warnings']
-            for war in warns:
-                warnings.warn(war)
-        except KeyError:
-            pass
+        if self.assert_errors:
+            assert 'errors' not in reply[5], reply[5]['errors'][0]
+        else:
+            try:
+                for k in return_status['errors']:
+                    warnings.warn("ERROR: " + k)
+            except KeyError:
+                pass
         
         return np.frombuffer(reply[4]['acq'], np.complex64)
 
@@ -272,13 +302,17 @@ def test_Experiment():
     plt.show()
 
 def test_grad_echo():
-    exp = Experiment(samples=1900 + 210, lo_freq=0.5) # sampling rate is off by 2x?
+    exp = Experiment(samples=1900 + 210,
+                     lo_freq=0.5,
+                     grad_channels=3,
+                     instruction_file='ocra_lib/grad_echo.txt',
+                     grad_t=1.8) # sampling rate is off by 2x?
     
     # RF pulse
     t = np.linspace(0, 200, 2001) # goes to 200us, samples every 100ns; length of pulse must be adjusted in grad_echo.txt
 
-    # Square pulse
     if False:
+        # square pulse at an offset frequency
         freq = 0.1 # MHz, offset from LO freq (DC up to a few MHz possible)
         tx_x = np.cos(2*np.pi*freq*t) + 1j*np.sin(2*np.pi*freq*t) # I,Q samples
         tx_idx = exp.add_tx(tx_x) # add the data to the ocra TX memory
@@ -302,7 +336,7 @@ def test_grad_echo():
     offset = 0.0
     grad_corr = grad*scale + offset
     
-    grad_idx = exp.add_grad(grad_corr, grad_corr, grad_corr)
+    grad_idx = exp.add_grad([grad_corr, grad_corr, grad_corr])
     if False: # set to true if you want to plot the x gradient waveform
         plt.plot(grad_corr);plt.show()
 
@@ -353,5 +387,5 @@ def test_rx_tx():
         
 if __name__ == "__main__":
     # test_Experiment()
-    # test_grad_echo()
-    test_rx_tx()
+    test_grad_echo()
+    # test_rx_tx()

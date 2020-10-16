@@ -162,7 +162,7 @@ class AcquireTest(unittest.TestCase):
                                            # 'grad_div': (1022, 63), # slowest rate, for basic testing
                                            # 'grad_div': (1022, 6) # slowest interval, fastest working SPI on gpa-fhdo board with 1.5m Ethernet cable
                                            # 'grad_div': (189, 6) # fastest sustained 4-channel update settings on gpa-fhdo
-                                           # 'grad_div': (150, 3)
+                                           # 'grad_div': (150, 1)
                                            # 'grad_div': (107, 10)
                                            'grad_div': (9, 1) # fastest sustained 4-channel update settings on ocra1
                                            })
