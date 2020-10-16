@@ -10,5 +10,5 @@ port = 11111
 #fpga_clk_freq_MHz = 122.88 # RP-125
 
 ## Gradient board: uncomment one of the below to configure the gradient data format
-#grad_board = "gpa_fhdo"
+#grad_board = "gpa-fhdo"
 #grad_board = "ocra1"

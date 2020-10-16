@@ -11,28 +11,58 @@ import scipy.signal as sig
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port, fpga_clk_freq_MHz
+from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 from ocra_lib.assembler import Assembler
 import server_comms as sc
 
 class Experiment:
-    """ Wrapper class for managing an entire experimental sequence 
+    """Wrapper class for managing an entire experimental sequence 
+
     samples: number of (I,Q) samples to acquire during a shot of the experiment
+
     lo_freq: local oscillator frequency, MHz
-    tx_t: RF TX sampling time in microseconds; will be rounded to a multiple of system clocks (for the STEMlab-122, it's 122.88 MHz). For example if tx_t = 1000, then a new RF TX sample will be output approximately every microsecond.
-    (self.tx_t will have the true value after construction.)
-    rx_t: RF RX sampling time in microseconds; as above (approximately). If samples = 100 and rx_t = 1.5, then samples will be taken for 150 us total.
-    instruction_file: path to an assembly text file, which will be compiled by the OCRA assembler.py.
-    If this is not supplied, the instruction bytecode should be supplied manually using define_instructions() before run() is called.
+
+    tx_t: RF TX sampling time in microseconds; will be rounded to a
+    multiple of system clocks (for the STEMlab-122, it's 122.88
+    MHz). For example if tx_t = 1000, then a new RF TX sample will be
+    output approximately every microsecond.  (self.tx_t will have the
+    true value after construction.)
+
+    rx_t: RF RX sampling time in microseconds; as above
+    (approximately). If samples = 100 and rx_t = 1.5, then samples will be
+    taken for 150 us total.  grad
+
+    instruction_file: path to an assembly text file, which will be
+    compiled by the OCRA assembler.py.  If this is not supplied, the
+    instruction bytecode should be supplied manually using
+    define_instructions() before run() is called.
+
+    OPTIONAL PARAMETERS - ONLY ALTER IF YOU KNOW WHAT YOU'RE DOING
+
+    grad_t: base update period of the gradient DACs *per channel*;
+    e.g. if you're specifying 4 data channels, note that each
+    individual channel will be updated with a period of 4*grad_t
+
+    grad_channels: specify how many channels you will be using (3 =
+    x,y,z, 4 = x,y,z,z2 etc)
+
+    spi_freq: frequency to run the gradient SPI interface at - must be
+    high enough to support your desired grad_t but not so high that
+    you experience communication issues. Leave this alone unless you
+    know what you're doing.
     """
 
     def __init__(self,
                  samples=1000,
-                 lo_freq=5,
-                 tx_t=0.1,
-                 rx_t=0.5,
-                 instruction_file=None):
-        self.samples = samples        
+                 lo_freq=5, # MHz
+                 tx_t=0.1, # us, best-effort
+                 rx_t=0.5, # us, best-effort
+                 instruction_file=None,
+                 grad_t=2.5, # us, best-effort
+                 grad_channels=4,
+                 spi_freq=None,
+                 local_grad_board=grad_board): # MHz, best-effort):
+        self.samples = samples
 
         self.lo_freq_bin = int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
         self.lo_freq = self.lo_freq_bin * fpga_clk_freq_MHz / (1 << 30)
@@ -48,6 +78,27 @@ class Experiment:
 
         self.instruction_file = instruction_file
         self.asmb = Assembler()
+        
+        ### Set the gradient controller properties
+        grad_clk_t = 0.007 # 7ns period
+        self.true_grad_div = np.round(grad_t/grad_clk_t).astype(np.int) # true divider value
+        self.grad_div = self.true_grad_div - 4 # what's sent to server
+        self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
+
+        spi_cycles_per_tx = 30 # actually 24, but including some overhead
+        if spi_freq is not None:
+            self.spi_div = np.floor(1 / (spi_freq*grad_clk_t)).astype(np.int) - 1
+        else:
+            # Auto-decide the SPI freq, to be as low as will work
+            assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
+            if local_grad_board == 'ocra1':
+                # SPI runs in parallel for each channel
+                self.true_spi_div = (self.true_grad_div * grad_channels) // spi_cycles_per_tx
+            elif local_grad_board == 'gpa-fhdo':
+                # SPI must be written sequentially for each channel
+                self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
+
+        self.spi_div = self.true_spi_div - 1
 
         # Segments for RF TX and gradient BRAMs
         self.tx_offsets = []
@@ -71,11 +122,14 @@ class Experiment:
 
         return len(self.tx_offsets) - 1
 
-    def add_grad(self, vec_x, vec_y, vec_z):
-        """ vec_x/y/z: real vector in the range [-1,1] units of full-scale gradient DAC output.
+    def add_grad(self, vectors):
+        """ vectors: list/tuple of real vectors in the range [-1,1] units of full-scale gradient DAC output. Must have the same number of vectors as grad_channels.
         
         Returns the index of the relevant vector, which can be used later when the pulse sequence is being compiled.
         """
+                
+
+                 
         assert vec_x.size == vec_y.size == vec_z.size, "Supply equal-length vectors for the three gradients."
         self.grad_offsets.append(self.current_grad_offset)
         self.current_grad_offset += vec_x.size
