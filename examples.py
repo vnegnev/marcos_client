@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import experiment as ex
+from pulseq_assembler import PSAssembler
 
 def test_grad_echo_loop():
     exp = ex.Experiment(samples=1900 + 210,

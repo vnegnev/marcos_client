@@ -1,4 +1,5 @@
 *~
+*__pycache__*
 local_config.py
 *.log
 # ocra_lib/

@@ -24,7 +24,7 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
   experiment.py : basic API for controlling the MaRCoS server
 
-  experiment_examples.py : examples of how to use experiment.py
+  examples.py : examples of how to use experiment.py and other libraries
 
   local_config.py.example : template file for local configuration; create a copy and name it local_config.py to configure your local setup
 
@@ -34,4 +34,8 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
   test_acquire.py : haphazard collection of tests and miscellaneous data-processing operations, used for preliminary testing of server features before they make it into the API or test_server.py
 
+  test_ocra_pulseq.py : tests of the [[https://github.com/lcbMGH/ocra-pulseq][ocra-pulseq]] interface
+
   test_server.py : unit tests to verify the correct version and operation of the MaRCoS server
+
+  vlsualiser.py : [WIP] plot expected ocra assembly file outputs (for very basic files)
