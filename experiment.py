@@ -142,7 +142,7 @@ class Experiment:
         return len(self.tx_offsets) - 1
 
     def clear_grad(self):
-        self.grad_data = [np.empty(0) for k in range(self.grad_channels)]
+        self.grad_data = [np.empty(1) for k in range(self.grad_channels)]
         self.grad_offsets = []
         self.current_grad_offset = 0
         self.grad_data_dirty = True
@@ -171,6 +171,9 @@ class Experiment:
 
     def compile_tx_data(self):
         """ go through the TX data and prepare binary array to send to the server """
+        if self.tx_data.size == 0:
+            self.tx_data = np.array([0])
+            
         self.tx_bytes = bytearray(self.tx_data.size * 4)
         if np.any(np.abs(self.tx_data) > 1.0):
             warnings.warn("TX data too large! Overflow will occur.")
@@ -188,6 +191,9 @@ class Experiment:
     def compile_grad_data(self):
         """ go through the grad data and prepare binary array to send to the server """
         if not hasattr(self, 'grad_data'):
+            self.clear_grad()
+
+        if self.grad_data[0].size == 0:
             self.grad_data = [np.array([0]) for k in range(self.grad_channels)]
 
         grad_bram_data = np.zeros(self.grad_data[0].size * self.grad_channels, dtype=np.uint32)

@@ -11,7 +11,8 @@ def test_grad_echo_loop():
                         grad_channels=3,
                         instruction_file='ocra_lib/grad_echo.txt',
                         grad_t=0.8,
-                        print_infos=True)
+                        print_infos=True,
+                        assert_errors=False)
     
     # RF pulse
     t = np.linspace(0, 200, 2001) # goes to 200us, samples every 100ns; length of pulse must be adjusted in grad_echo.txt

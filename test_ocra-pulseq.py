@@ -19,26 +19,29 @@ st = pdb.set_trace
 if __name__ == "__main__":
     lo_freq = 5 # MHz
     tx_t = 1 # us
-    grad_interval = 5 # us between 4-channel updates
+    rx_t = 5 # us
+    grad_interval = 1 # us between 4-channel updates
     ps = PSAssembler(rf_center=lo_freq*1e6,
                      rf_amp_max=5e3,
                      grad_max=10,
                      clk_t=0.1,
                      tx_t=tx_t,
                      grad_t=grad_interval)
-    _, _, cb = ps.assemble('../ocra-pulseq/test_files/test4.seq')
-    tx_arr = ps.tx_arr
-    gr_arr = ps.gr_arr
+    _, _, cb = ps.assemble('../ocra-pulseq/test_files/test2.seq')
+
 
     exp = ex.Experiment(samples=1000, # TODO: get information from PSAssembler
                         lo_freq=lo_freq,
                         tx_t=tx_t,
-                        rx_t=1, # TODO: get information from PSAssembler
+                        rx_t=rx_t, # TODO: get information from PSAssembler
                         grad_channels=3,
-                        grad_t=grad_interval/3)
+                        grad_t=grad_interval/3,
+                        assert_errors=False)
 
     exp.define_instructions(cb)
-    exp.add_tx(tx_arr)
-    exp.add_grad(gr_arr)
+
+    exp.add_tx(ps.tx_arr)
+    exp.add_grad(ps.gr_arr)
+        
     data = exp.run()
 
