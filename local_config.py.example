@@ -12,3 +12,8 @@ port = 11111
 ## Gradient board: uncomment one of the below to configure the gradient data format
 #grad_board = "gpa-fhdo"
 #grad_board = "ocra1"
+
+## Ocra-pulseq path, for use of the ocra-pulseq library (optional).
+## Adjust the path to suit your ocra-pulseq location.
+#import sys
+#sys.path.append('/home/vlad/Documents/mri/ocra-pulseq')
