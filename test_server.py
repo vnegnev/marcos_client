@@ -110,10 +110,6 @@ class ServerTest(unittest.TestCase):
                                    'grad_mem': b"0000"*8192,
                                    })
         reply = send_packet(packet, self.s)
-
-        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
-        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
-        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
         
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
@@ -121,8 +117,6 @@ class ServerTest(unittest.TestCase):
                            'tx_size': 0, 'raw_tx_data': 0, 'grad_div': 0, 'grad_ser': 0,
                            'grad_mem': 0},
                           {'infos': [
-                              'true RX freq: {:s} MHz'.format(true_rx_freq),
-                              'TX sample duration: {:s} us'.format(tx_sample_duration),
                               'tx data bytes copied: 65536',
                               'gradient mem data bytes copied: 32768']}]
         )
@@ -148,10 +142,6 @@ class ServerTest(unittest.TestCase):
                                    })
         
         reply = send_packet(packet, self.s)
-
-        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
-        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
-        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
         
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
@@ -163,11 +153,33 @@ class ServerTest(unittest.TestCase):
                                       'serialiser enables outside the range [0, 0xf], check your settings',
                                       'too much grad mem data: 32772 bytes > 32768'],
                            'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
-                                        ],
-                           'infos': ['true RX freq: {:s} MHz'.format(true_rx_freq),
-                                     'TX sample duration: {:s} us'.format(tx_sample_duration),
-                                     ]}])
+                                        ]}])
 
+    def test_state(self):        
+        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
+        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
+        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
+        rx_sample_duration = 0
+
+        packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
+                                   'tx_div': 10,
+                                   'rx_div': 250,                                   
+                                   'grad_div': (303, 32),
+                                   'state': fpga_clk_freq_MHz * 1e6
+                                   })
+        reply = send_packet(packet, self.s)
+
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'lo_freq': 0, 'tx_div': 0, 'rx_div': 0, 'grad_div': 0,
+                           'state': 0},
+                          {'infos': [
+                              'LO frequency [CHECK]: 13.440000 MHz',
+                              'TX sample duration [CHECK]: 0.070000 us',
+                              'RX sample duration [CHECK]: 2.034505 us',
+                              'gradient sample duration (*not* DAC sampling rate): 2.149000 us',
+                              'gradient SPI transmission duration: 5.558000 us']}])
+        
     def test_gradient_mem(self):
         grad_mem_bytes = 4 * 8192
 
@@ -196,7 +208,7 @@ class ServerTest(unittest.TestCase):
                           ])        
 
     def test_acquire_simple(self):
-        # For comprehensive test, see test_acquire.py
+        # For comprehensive tests, see test_loopback.py
         samples = 10
         packet = construct_packet({'acq': samples})
         reply = send_packet(packet, self.s)
