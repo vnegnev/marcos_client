@@ -139,8 +139,9 @@ class AcquireTest(unittest.TestCase):
                     
                     raw_gd = np.ones(2048, dtype=np.uint32) * 0x8000
                     # raw_gd[0] = 0x00000f
-                    raw_gd[0] = 0x030100 # init
-                    raw_gd[1:dac_data.size+1] = (dac_data + (1 << 15)).astype(np.uint32)
+                    # raw_gd[0] = 0x030100 # init
+                    # raw_gd[1] = 0x020000 # sync
+                    raw_gd[0:dac_data.size] = (dac_data + (1 << 15)).astype(np.uint32)
                     
                     # raw_gd[0] = 0x111111 # init
                     # raw_gd[0] = 0x000000
@@ -149,10 +150,11 @@ class AcquireTest(unittest.TestCase):
 
                     ## Extend X data to Y, Z, Z2
                     raw_grad_data = np.empty(8192, dtype=np.uint32)
-                    raw_grad_data[0::4] = raw_gd # channel 0
-                    raw_grad_data[1::4] = (raw_gd | (1 << 25) ) # channel 1
-                    raw_grad_data[2::4] = (raw_gd | (2 << 25) ) # channel 2
-                    raw_grad_data[3::4] = (raw_gd | (3 << 25) | (1 << 24) ) # channel 3 and broadcast
+                    raw_grad_data[0::4] = raw_gd | (1 << 19) # channel 0
+                    raw_grad_data[1::4] = raw_gd | (1 << 19) | (1 << 25) | (1 << 16) # channel 1
+                    raw_grad_data[2::4] = raw_gd | (1 << 19) | (2 << 25) | (2 << 16) # channel 2
+                    raw_grad_data[3::4] = raw_gd | (1 << 19) | (3 << 25) | (1 << 24) | (3 << 16) # channel 3 and broadcast
+                    # raw_grad_data[3::4] = np.ones_like(raw_gd, dtype=np.uint32) * 0x020000 # sync before ch0 transmissions
 
                 # number of samples acquired will determine how long the actual sequence runs for, both RF and gradients,
                 # since the processor is put into the reset state by the server once acquisition is complete
@@ -161,10 +163,11 @@ class AcquireTest(unittest.TestCase):
                                            'grad_ser': grad_core_select,
                                            # 'grad_div': (1022, 63), # slowest rate, for basic testing
                                            # 'grad_div': (1022, 6) # slowest interval, fastest working SPI on gpa-fhdo board with 1.5m Ethernet cable
+                                           'grad_div': (250, 8)
                                            # 'grad_div': (189, 6) # fastest sustained 4-channel update settings on gpa-fhdo
                                            # 'grad_div': (150, 1)
                                            # 'grad_div': (107, 10)
-                                           'grad_div': (9, 1) # fastest sustained 4-channel update settings on ocra1
+                                           # 'grad_div': (9, 1) # fastest sustained 4-channel update settings on ocra1
                                            })
                 reply = send_packet(packet, self.s)
 

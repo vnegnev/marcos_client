@@ -47,7 +47,7 @@ if __name__ == "__main__":
     
     data = exp.run() # Comment out this line to avoid running on the hardware
 
-    # plt.plot(data.imag)
-    # plt.show()
+    plt.plot(data.imag)
+    plt.show()
 
     # st()

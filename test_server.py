@@ -155,6 +155,116 @@ class ServerTest(unittest.TestCase):
                            'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
                                         ]}])
 
+    # @unittest.skip("not yet decided on how to handle the return values")
+    def test_grad_adc(self):        
+        import time
+        def wait():
+            time.sleep(0.005)
+        # # configure
+        send_packet(construct_packet({'grad_div': (500, 25), 'grad_ser': 2}), self.s)
+
+        # DAC writes
+        send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
+        send_packet(construct_packet({'grad_dir': 0x00087000}), self.s) # output 0
+        send_packet(construct_packet({'grad_dir': 0x00097000}), self.s) # output 1
+        send_packet(construct_packet({'grad_dir': 0x000a7000}), self.s) # output 2
+        send_packet(construct_packet({'grad_dir': 0x000b7000}), self.s) # output 3
+        
+        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
+        send_packet(construct_packet({'grad_dir': 0x00084000}), self.s) # output 0
+        send_packet(construct_packet({'grad_dir': 0x00094000}), self.s) # output 1
+        send_packet(construct_packet({'grad_dir': 0x000a4000}), self.s) # output 2
+        send_packet(construct_packet({'grad_dir': 0x000b4000}), self.s) # output 3            
+
+        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
+        send_packet(construct_packet({'grad_dir': 0x00088000}), self.s) # output 0
+        send_packet(construct_packet({'grad_dir': 0x00098000}), self.s) # output 1
+        send_packet(construct_packet({'grad_dir': 0x000a8000}), self.s) # output 2
+        send_packet(construct_packet({'grad_dir': 0x000b8000}), self.s) # output 3
+
+        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
+        # send_packet(construct_packet({'grad_dir': 0x00080000}), self.s) # output 0
+        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
+        # send_packet(construct_packet({'grad_dir': 0x00084000}), self.s) # output 0
+        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
+        # send_packet(construct_packet({'grad_dir': 0x00086000}), self.s) # output 0        
+        
+        if True:
+            wait()
+            send_packet(construct_packet({'grad_dir': 0x00088000}), self.s)        
+            # send_packet(construct_packet({'grad_dir': 0x02004800}), self.s)
+            # send_packet(construct_packet({'grad_dir': 0x04004800}), self.s)
+            # send_packet(construct_packet({'grad_dir': 0x07004800}), self.s)
+
+            # ADC defaults
+            send_packet(construct_packet({'grad_dir': 0x40850000}), self.s)
+            wait()
+            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
+
+            send_packet(construct_packet({'grad_dir': 0x40116000}), self.s)
+            wait()
+            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
+
+            send_packet(construct_packet({'grad_dir': 0x400f6000}), self.s)
+            wait()
+            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
+
+            send_packet(construct_packet({'grad_dir': 0x400d6000}), self.s)
+            wait()
+            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
+
+            send_packet(construct_packet({'grad_dir': 0x400b6000}), self.s)
+            wait()
+            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
+
+            send_packet(construct_packet({'grad_dir': 0x40050000}), self.s)
+            wait()
+            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
+
+
+            # read back mode
+            # send_packet(construct_packet({'grad_dir': 0x40003f00}), self.s)
+            # print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+            # # ADC ch 0 read
+            # send_packet(construct_packet({'grad_dir': 0x4000c000}), self.s)
+            send_packet(construct_packet({'grad_dir': 0x4000c000}), self.s)
+            wait()
+            print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+            send_packet(construct_packet({'grad_dir': 0x4000c400}), self.s)
+            wait()        
+            print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+            send_packet(construct_packet({'grad_dir': 0x4000c800}), self.s)
+            wait()        
+            print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+            send_packet(construct_packet({'grad_dir': 0x4000cc00}), self.s)
+            wait()        
+            print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+        
+        # send_packet(construct_packet({'grad_dir': 0x4000c000}), self.s)
+        # print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+        # send_packet(construct_packet({'grad_dir': 0x4000c000}), self.s)
+        # print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])                
+
+        # # read-back
+        # send_packet(construct_packet({'grad_dir': 0x40000000 | (0x3f00 << 1) | 0x00c0 }), self.s)
+        # print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+        # send_packet(construct_packet({'grad_dir': 0x40000000 | (0x05 << 9) | (0x1 << 8) }), self.s)
+        # print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+        # send_packet(construct_packet({'grad_dir': 0x40000000 | (0x01 << 9) | (0x1 << 8) }), self.s)
+        # print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
+        # # read back
+        # for k in range(10):
+        #     send_packet(construct_packet({'grad_dir': 0x40000000 | (0x3f00 << 1) | 0x00c7 }), self.s)
+        #     print('ADC: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
+
     def test_state(self):        
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
         true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
