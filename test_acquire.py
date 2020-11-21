@@ -163,7 +163,7 @@ class AcquireTest(unittest.TestCase):
                                            'grad_ser': grad_core_select,
                                            # 'grad_div': (1022, 63), # slowest rate, for basic testing
                                            # 'grad_div': (1022, 6) # slowest interval, fastest working SPI on gpa-fhdo board with 1.5m Ethernet cable
-                                           'grad_div': (250, 8)
+                                           'grad_div': (200, 6) # working for gpa-fhdo with ground connected, slew slow, current 4
                                            # 'grad_div': (189, 6) # fastest sustained 4-channel update settings on gpa-fhdo
                                            # 'grad_div': (150, 1)
                                            # 'grad_div': (107, 10)
