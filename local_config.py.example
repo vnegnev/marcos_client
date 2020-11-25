@@ -7,7 +7,7 @@ port = 11111
 
 ## FPGA clock frequency: uncomment one of the below to configure various system behaviour
 #fpga_clk_freq_MHz = 122.88 # RP-122
-#fpga_clk_freq_MHz = 122.88 # RP-125
+#fpga_clk_freq_MHz = 125.0 # RP-125
 
 ## Gradient board: uncomment one of the below to configure the gradient data format
 #grad_board = "gpa-fhdo"
