@@ -119,8 +119,50 @@ class Experiment:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect( (ip_address, port) )
 
+        self.init_gpa()
+
     def __del__(self):
         self.s.close()
+
+    def server_command(self, server_dict):
+        packet = sc.construct_packet(server_dict)
+        reply = sc.send_packet(packet, self.s)
+        return_status = reply[5]
+        
+        if self.print_infos and 'infos' in return_status:
+            print("Server info:")
+            for k in return_status['infos']:
+                print(k)
+
+        if 'warnings' in return_status:
+            for k in return_status['warnings']:
+                warnings.warn(k)
+
+        if 'errors' in return_status:            
+            if self.assert_errors:
+                assert 'errors' not in return_status, return_status['errors'][0]
+            else:
+                for k in return_status['errors']:
+                    warnings.warn("ERROR: " + k)
+
+        return reply
+
+    def init_gpa(self):
+        """ Setup commands to configure the GPA; only needs to be done once per GPA power-up """
+        if self.grad_board == 'ocra1':
+            gs = 1
+            init_words = [0x00200002, 0x02200002, 0x04200002, 0x07200002]
+        else:
+            gs = 2
+            init_words = [0x00030100, # DAC sync reg
+                          0x40850000, 0x400b6000, 0x400d6000, 0x400f6000, 0x40116000] # ADC reset, input ranges for each channel
+
+        # configure grad ctrl divisors
+        self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
+            
+        for iw in init_words:
+            # direct commands to grad board
+            self.server_command({'grad_dir': iw})
 
     def clear_tx(self):
         self.tx_offsets = []
@@ -246,8 +288,8 @@ class Experiment:
     def run(self):
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
-        self.auto_compile()
-        packet = sc.construct_packet({
+        self.auto_compile()        
+        reply = self.server_command({
             'lo_freq': self.lo_freq_bin,
             'rx_div': self.rx_div_real,
             'tx_div': self.tx_div,
@@ -258,30 +300,6 @@ class Experiment:
             'grad_mem': self.grad_bytes,
             'seq_data': self.instructions,
             'acq': self.samples})
-        
-        reply = sc.send_packet(packet, self.s)
-
-        return_status = reply[5]
-
-        if self.print_infos:
-            print("Server info:")
-            for k in return_status['infos']:
-                print(k)
-
-        try:
-            for k in return_status['warnings']:
-                warnings.warn(k)
-        except KeyError:
-            pass
-
-        if self.assert_errors:
-            assert 'errors' not in reply[5], reply[5]['errors'][0]
-        else:
-            try:
-                for k in return_status['errors']:
-                    warnings.warn("ERROR: " + k)
-            except KeyError:
-                pass
         
         return np.frombuffer(reply[4]['acq'], np.complex64)
 
