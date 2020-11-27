@@ -197,17 +197,18 @@ class Experiment:
 	calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
 	"""
 	def calulate_correction_factor(channel,dac_code):
-		left_index = 0;
-		right_index = self.self.dac_values.len - 1
-		for k in range(self.self.dac_values.len):
-			if self.dac_values[k] <= dac_code:
-				left_index = k
-			if self.dac_values[k] >= dac_code:
-				right_index = k
-				break
-		if left_index == right_index:
-			return self.gpaCalRatios[channel][left_index]
-		return ( self.gpaCalRatios[channel][rightIndex]- self.gpaCalRatios[channel][leftIndex])/(self.dac_values[rightIndex]-self.dac_values[leftIndex])*(dac_code-self.dac_values[leftIndex])+self.gpaCalRatios[channel][leftIndex];
+		return np.interp(dac_code,self.self.dac_values,self.gpaCalRatios[channel])
+		# left_index = 0;
+		# right_index = self.self.dac_values.len - 1
+		# for k in range(self.self.dac_values.len):
+			# if self.dac_values[k] <= dac_code:
+				# left_index = k
+			# if self.dac_values[k] >= dac_code:
+				# right_index = k
+				# break
+		# if left_index == right_index:
+			# return self.gpaCalRatios[channel][left_index]
+		# return ( self.gpaCalRatios[channel][rightIndex]- self.gpaCalRatios[channel][leftIndex])/(self.dac_values[rightIndex]-self.dac_values[leftIndex])*(dac_code-self.dac_values[leftIndex])+self.gpaCalRatios[channel][leftIndex];
 	
 	"""
 	performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
