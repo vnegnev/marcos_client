@@ -11,12 +11,12 @@ from pulseq_assembler import PSAssembler
 st = pdb.set_trace
 
 if __name__ == "__main__":
-    lo_freq = 2.1 # MHz
-    tx_t = 0.994 # us
-    rx_t = 0.497
-    clk_t = 0.007
+	lo_freq = 2.1 # MHz
+	tx_t = 0.994 # us
+	rx_t = 0.497
+	clk_t = 0.007
 	num_grad_channels = 3
-    grad_interval = 10 # us between [num_grad_channels] channel updates
+	grad_interval = 10 # us between [num_grad_channels] channel updates
 	
 	gamma = 42570000 # Hz/T
 	
