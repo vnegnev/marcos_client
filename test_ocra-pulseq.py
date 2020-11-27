@@ -18,14 +18,11 @@ st = pdb.set_trace
 
 if __name__ == "__main__":
     lo_freq = 2.1 # MHz
-    # tx_t = 0.994 # us
     tx_t = 0.994 # us
-    # rx_t = tx_t*5 # us
-    # rx_t = 0.595
     rx_t = 0.497
     clk_t = 0.007
 	num_grad_channels = 3	
-    grad_interval = 10 # us between 3-channel updates
+    grad_interval = 10 # us between [num_grad_channels] channel updates
     ps = PSAssembler(rf_center=lo_freq*1e6,
                      # how many Hz the max amplitude of the RF will produce; i.e. smaller causes bigger RF V to compensate
                      # rf_amp_max=5e3,

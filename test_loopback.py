@@ -12,8 +12,8 @@ st = pdb.set_trace
 
 if __name__ == "__main__":
     lo_freq = 2.1 # MHz
-    tx_t = 2 # us
-    rx_t = 2
+    tx_t = 0.994 # us
+    rx_t = 0.497
     clk_t = 0.007
 	num_grad_channels = 3
     grad_interval = 10 # us between [num_grad_channels] channel updates
