@@ -175,9 +175,13 @@ class Experiment:
         
     def expected_adc_code(self, dac_code):
         dac_voltage = dac_code/0xFFFF*5
-        gpa_current = (dac_voltage-2.5) * 2
-        adc_voltage = (gpa_current+2.5)
-        adc_code = int(np.round(adc_voltage/4*0xFFFF))
+		v_ref = 2.5
+		gpa_current_per_volt = 3.75
+        gpa_current = (dac_voltage-v_ref) * gpa_current_per_volt
+		r_shunt = 0.2
+        adc_voltage = gpa_current*r_shunt+v_ref
+		adc_gain = 4.096*1.25
+        adc_code = int(np.round(adc_voltage*0xFFFF/adc_gain))
         print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
         
