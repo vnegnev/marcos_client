@@ -23,7 +23,7 @@ if __name__ == "__main__":
                      clk_t=clk_t,
                      tx_t=tx_t,
                      grad_t=grad_interval)
-    _, _, cb = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq')
+    _, _, _, cb = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq')
 
     exp = ex.Experiment(samples=650, # TODO: get information from PSAssembler
                         lo_freq=lo_freq,
@@ -44,6 +44,9 @@ if __name__ == "__main__":
     # for k in range(1):
 
     # exp.rx_div_real = 25 # temporary for testing
+    
+    exp.init_gpa()
+    exp.calibrate_gpa_fhdo()
     
     data = exp.run() # Comment out this line to avoid running on the hardware
 
