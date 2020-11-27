@@ -325,8 +325,8 @@ class Experiment:
                 gr_dacbits = np.round(131071 * gd).astype(np.uint32) & 0x3ffff 
                 gr = (gr_dacbits << 2) | 0x00100000
             elif self.grad_board == 'gpa-fhdo':
-                # Not 2's complement - 0x0 word is -5V, 0xffff is +5V
-                gr_dacbits = np.round(65535 * (gd + 1)).astype(np.uint32) & 0xffff
+                # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
+                gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
 				gr_dacbits *= self.calulate_correction_factor(ch,gr_dacbits)
                 gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
 
