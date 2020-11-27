@@ -12,8 +12,8 @@ st = pdb.set_trace
 
 if __name__ == "__main__":
     lo_freq = 2.1 # MHz
-    tx_t = 0.994 # us
-    rx_t = 0.497
+    tx_t = 2 # us
+    rx_t = 2
     clk_t = 0.007
     grad_interval = 4 * tx_t # us between 4-channel updates
     ps = PSAssembler(rf_center=lo_freq*1e6,
@@ -49,9 +49,9 @@ if __name__ == "__main__":
     exp.init_gpa()
     exp.calibrate_gpa_fhdo()
     
-    data = exp.run() # Comment out this line to avoid running on the hardware
+    #data = exp.run() # Comment out this line to avoid running on the hardware
 
-    plt.plot(data.imag)
-    plt.show()
+    #plt.plot(data.imag)
+    #plt.show()
 
     # st()

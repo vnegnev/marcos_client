@@ -108,6 +108,8 @@ class Experiment:
                 self.true_spi_div = 63 # slowest SPI clock possible
 
         self.spi_div = self.true_spi_div - 1
+        #self.spi_div = 6;
+        print('spi_div ',self.spi_div);
         self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
 
         self.print_infos = print_infos
@@ -165,7 +167,7 @@ class Experiment:
             self.server_command({'grad_dir': iw})
     
     def read_gpa_adc(self, channel):
-        sc.send_packet(sc.construct_packet({'grad_dir': 0x40c00000 | (channel<<18)}), self.s) # dummy read
+        sc.send_packet(sc.construct_packet({'grad_dir': 0x40c00000 | (channel<<18)}), self.s)
         sc.send_packet(sc.construct_packet({'grad_dir': 0x40c00000 | (channel<<18)}), self.s)
         return sc.send_packet(sc.construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
     
@@ -173,29 +175,27 @@ class Experiment:
         sc.send_packet(sc.construct_packet({'grad_dir': 0x00080000 | (channel<<16) | int(value)}), self.s) # DAC output
         
     def calibrate_gpa_fhdo(self):
-        averages = 10
+        averages = 1
         channel = 0
-        dac_values = np.array([0x6000,0x7000, 0x8000, 0x9000, 0xA000])
+        dac_values = np.array([0x7000, 0x8000, 0x9000])
         if True:
             np.random.shuffle(dac_values) # to ensure randomised acquisition
         adc_values = np.zeros([dac_values.size, averages])
         for k, dv in enumerate(dac_values):
             self.write_gpa_dac(channel,dv);
 
-            self.read_gpa_adc(channel);
-            for m in range(averages): # average 10x
+            self.read_gpa_adc(channel); # dummy read
+            for m in range(averages): 
                 adc_values[k, m] = self.read_gpa_adc(channel);
 
-        self.calRatios = dac_values/(adc_values.sum(1)/averages)
         self.write_gpa_dac(0,0x8000); # set gradient current back to 0
+        self.gpaCalRatios = dac_values/(adc_values.sum(1)/averages);
         plt.plot(dac_values, adc_values.min(1), 'y.')
         plt.plot(dac_values, adc_values.max(1), 'y.')
         plt.plot(dac_values, adc_values.sum(1)/averages, 'b.')
         plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
         plt.grid(True)
         plt.show()
-    
-
 
     def clear_tx(self):
         self.tx_offsets = []
