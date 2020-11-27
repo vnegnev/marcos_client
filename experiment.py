@@ -168,25 +168,34 @@ class Experiment:
     
     def read_gpa_adc(self, channel):
         sc.send_packet(sc.construct_packet({'grad_dir': 0x40c00000 | (channel<<18)}), self.s)
-        sc.send_packet(sc.construct_packet({'grad_dir': 0x40c00000 | (channel<<18)}), self.s)
         return sc.send_packet(sc.construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
     
     def write_gpa_dac(self, channel, value):
         sc.send_packet(sc.construct_packet({'grad_dir': 0x00080000 | (channel<<16) | int(value)}), self.s) # DAC output
         
+    def expected_adc_code(self, dac_code):
+        dac_voltage = dac_code/0xFFFF*5
+        gpa_current = (dac_voltage-2.5) * 2
+        adc_voltage = (gpa_current+2.5)
+        adc_code = int(np.round(adc_voltage/4*0xFFFF))
+        print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
+        return adc_code
+        
     def calibrate_gpa_fhdo(self):
         averages = 1
         channel = 0
         dac_values = np.array([0x7000, 0x8000, 0x9000])
-        if True:
+        if False:
             np.random.shuffle(dac_values) # to ensure randomised acquisition
         adc_values = np.zeros([dac_values.size, averages])
         for k, dv in enumerate(dac_values):
             self.write_gpa_dac(channel,dv);
+            self.expected_adc_code(dv)
 
             self.read_gpa_adc(channel); # dummy read
             for m in range(averages): 
                 adc_values[k, m] = self.read_gpa_adc(channel);
+            print('received ADC code {:d}'.format(int((adc_values.sum(1)/averages)[k])))
 
         self.write_gpa_dac(0,0x8000); # set gradient current back to 0
         self.gpaCalRatios = dac_values/(adc_values.sum(1)/averages);
