@@ -196,7 +196,7 @@ class Experiment:
 	"""
 	calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
 	"""
-	def calulate_correction_factor(dac_code,channel):
+	def calulate_correction_factor(channel,dac_code):
 		left_index = 0;
 		right_index = self.self.dac_values.len - 1
 		for k in range(self.self.dac_values.len):
@@ -227,7 +227,7 @@ class Experiment:
 				self.read_gpa_adc(channel); # dummy read
 				for m in range(averages): 
 					adc_values[k, m] = self.read_gpa_adc(channel);
-				self.gpaCalRatios[channel][k] = expected_adc_code(dac_values)/(adc_values.sum(1)/averages);
+				self.gpaCalRatios[channel][k] = self.expected_adc_code(dac_values)/(adc_values.sum(1)/averages);
 				print('received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
 
 			self.write_gpa_dac(0,0x8000); # set gradient current back to 0
@@ -327,6 +327,7 @@ class Experiment:
             elif self.grad_board == 'gpa-fhdo':
                 # Not 2's complement - 0x0 word is -5V, 0xffff is +5V
                 gr_dacbits = np.round(65535 * (gd + 1)).astype(np.uint32) & 0xffff
+				gr_dacbits *= self.calulate_correction_factor(ch,gr_dacbits)
                 gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
 
             # always broadcast for the final channel
