@@ -15,7 +15,8 @@ if __name__ == "__main__":
     tx_t = 2 # us
     rx_t = 2
     clk_t = 0.007
-    grad_interval = 4 * tx_t # us between 4-channel updates
+	num_grad_channels = 3
+    grad_interval = 10 # us between [num_grad_channels] channel updates
     ps = PSAssembler(rf_center=lo_freq*1e6,
                      # how many Hz the max amplitude of the RF will produce; i.e. smaller causes bigger RF V to compensate
                      rf_amp_max=16,
@@ -26,12 +27,12 @@ if __name__ == "__main__":
 
     _, _, cb, readout_samples = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq')
 
-    exp = ex.Experiment(samples=readout_samples, # TODO: get information from PSAssembler
+    exp = ex.Experiment(samples=readout_samples, 
                         lo_freq=lo_freq,
                         tx_t=tx_t,
                         rx_t=rx_t, # TODO: get information from PSAssembler
-                        grad_channels=3,
-                        grad_t=grad_interval/3,
+                        grad_channels=num_grad_channels,
+                        grad_t=grad_interval/num_grad_channels,
                         assert_errors=False)
     
     exp.define_instructions(cb)
