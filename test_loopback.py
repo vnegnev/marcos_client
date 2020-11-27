@@ -36,23 +36,23 @@ if __name__ == "__main__":
 	grad_max = 16 # unrealistic value used only for loopback test
 	
 	rf_amp_max = 10 # factor used to normalize RF amplitude, should be max value of system used!
-    ps = PSAssembler(rf_center=lo_freq*1e6,
-                     # how many Hz the max amplitude of the RF will produce; i.e. smaller causes bigger RF V to compensate
-                     rf_amp_max=rf_amp_max,
-                     grad_max=grad_max,
-                     clk_t=clk_t,
-                     tx_t=tx_t,
-                     grad_t=grad_interval)
+	ps = PSAssembler(rf_center=lo_freq*1e6,
+		# how many Hz the max amplitude of the RF will produce; i.e. smaller causes bigger RF V to compensate
+		rf_amp_max=rf_amp_max,
+		grad_max=grad_max,
+		clk_t=clk_t,
+		tx_t=tx_t,
+		grad_t=grad_interval)
 
-    _, _, cb, readout_samples = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq')
+	_, _, cb, readout_samples = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq')
 
-    exp = ex.Experiment(samples=readout_samples, 
-                        lo_freq=lo_freq,
-                        tx_t=tx_t,
-                        rx_t=rx_t, # TODO: get information from PSAssembler
-                        grad_channels=num_grad_channels,
-                        grad_t=grad_interval/num_grad_channels,
-                        assert_errors=False)
+	exp = ex.Experiment(samples=readout_samples, 
+		lo_freq=lo_freq,
+		tx_t=tx_t,
+		rx_t=rx_t, # TODO: get information from PSAssembler
+		grad_channels=num_grad_channels,
+		grad_t=grad_interval/num_grad_channels,
+		assert_errors=False)
     
     exp.define_instructions(cb)
     x = np.linspace(0,2*np.pi, 100)
