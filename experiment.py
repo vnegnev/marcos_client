@@ -179,11 +179,11 @@ class Experiment:
     def write_gpa_dac(self, channel, value):
         sc.send_packet(sc.construct_packet({'grad_dir': 0x00080000 | (channel<<16) | int(value)}), self.s) # DAC output
     
-    """
-    a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
-    The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
-    """
     def expected_adc_code(self, dac_code):
+        """
+        a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
+        The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
+        """
         dac_voltage = dac_code/0xFFFF*5
         v_ref = 2.5
         gpa_current_per_volt = 3.75
@@ -195,10 +195,10 @@ class Experiment:
         print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
-    """
-    calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
-    """
     def calulate_correction_factor(channel,dac_code):
+        """
+        calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
+        """
         return np.interp(dac_code,self.self.dac_values,self.gpaCalRatios[channel])
 		# left_index = 0;
 		# right_index = self.self.dac_values.len - 1
@@ -212,11 +212,11 @@ class Experiment:
 			# return self.gpaCalRatios[channel][left_index]
 		# return ( self.gpaCalRatios[channel][rightIndex]- self.gpaCalRatios[channel][leftIndex])/(self.dac_values[rightIndex]-self.dac_values[leftIndex])*(dac_code-self.dac_values[leftIndex])+self.gpaCalRatios[channel][leftIndex];
 	
-    """
-    performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
-    be adapted to the accuracy needed.
-    """
     def calibrate_gpa_fhdo(self):
+        """
+        performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
+        be adapted to the accuracy needed.
+        """
         averages = 1
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
         for channel in range(4):
