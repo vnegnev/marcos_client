@@ -219,7 +219,7 @@ class Experiment:
         """
         averages = 1
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-        for channel in range(4):
+        for channel in range(self.grad_channels):
             if False:
                 np.random.shuffle(dac_values) # to ensure randomised acquisition
             adc_values = np.zeros([self.dac_values.size, averages])
