@@ -81,10 +81,10 @@ class Experiment:
 
         self.instruction_file = instruction_file
         self.asmb = Assembler()
-		
-		# initialize gpa fhdo calibration with ideal values
-		self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-		self.gpaCalRatios = np.ones(4,self.dac_values.len)
+
+        # initialize gpa fhdo calibration with ideal values
+        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        self.gpaCalRatios = np.ones((4, self.dac_values.size))
         
         ### Set the gradient controller properties
         grad_clk_t = 0.007 # 7ns period
@@ -112,9 +112,11 @@ class Experiment:
                 self.true_spi_div = 63 # slowest SPI clock possible
 
         self.spi_div = self.true_spi_div - 1
-        #self.spi_div = 6;
-        print('spi_div ',self.spi_div);
         self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
+
+        print('spi_div = ',self.spi_div);
+        if self.grad_ser == 0x2 and self.spi_div < 6:
+            print('Warning: the fastest possible spi_div for GPA FHDO is 6!')
 
         self.print_infos = print_infos
         self.assert_errors = assert_errors
@@ -177,27 +179,27 @@ class Experiment:
     def write_gpa_dac(self, channel, value):
         sc.send_packet(sc.construct_packet({'grad_dir': 0x00080000 | (channel<<16) | int(value)}), self.s) # DAC output
     
-	"""
-	a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
-	The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
-	"""
+    """
+    a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
+    The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
+    """
     def expected_adc_code(self, dac_code):
         dac_voltage = dac_code/0xFFFF*5
-		v_ref = 2.5
-		gpa_current_per_volt = 3.75
+        v_ref = 2.5
+        gpa_current_per_volt = 3.75
         gpa_current = (dac_voltage-v_ref) * gpa_current_per_volt
-		r_shunt = 0.2
+        r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
-		adc_gain = 4.096*1.25
+        adc_gain = 4.096*1.25
         adc_code = int(np.round(adc_voltage*0xFFFF/adc_gain))
         print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
-	"""
-	calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
-	"""
-	def calulate_correction_factor(channel,dac_code):
-		return np.interp(dac_code,self.self.dac_values,self.gpaCalRatios[channel])
+    """
+    calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
+    """
+    def calulate_correction_factor(channel,dac_code):
+        return np.interp(dac_code,self.self.dac_values,self.gpaCalRatios[channel])
 		# left_index = 0;
 		# right_index = self.self.dac_values.len - 1
 		# for k in range(self.self.dac_values.len):
@@ -210,36 +212,36 @@ class Experiment:
 			# return self.gpaCalRatios[channel][left_index]
 		# return ( self.gpaCalRatios[channel][rightIndex]- self.gpaCalRatios[channel][leftIndex])/(self.dac_values[rightIndex]-self.dac_values[leftIndex])*(dac_code-self.dac_values[leftIndex])+self.gpaCalRatios[channel][leftIndex];
 	
-	"""
-	performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
-	be adapted to the accuracy needed.
-	"""
+    """
+    performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
+    be adapted to the accuracy needed.
+    """
     def calibrate_gpa_fhdo(self):
         averages = 1
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-		for channel in range(4):
-			if False:
-				np.random.shuffle(dac_values) # to ensure randomised acquisition
-			adc_values = np.zeros([dac_values.size, averages])
-			for k, dv in enumerate(dac_values):
-				self.write_gpa_dac(channel,dv);
-				self.expected_adc_code(dv)
+        for channel in range(4):
+            if False:
+                np.random.shuffle(dac_values) # to ensure randomised acquisition
+            adc_values = np.zeros([dac_values.size, averages])
+            for k, dv in enumerate(dac_values):
+                self.write_gpa_dac(channel,dv);
+                self.expected_adc_code(dv)
 
-				self.read_gpa_adc(channel); # dummy read
-				for m in range(averages): 
-					adc_values[k, m] = self.read_gpa_adc(channel);
-				self.gpaCalRatios[channel][k] = self.expected_adc_code(dac_values)/(adc_values.sum(1)/averages);
-				print('Received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
+                self.read_gpa_adc(channel); # dummy read
+                for m in range(averages): 
+                    adc_values[k, m] = self.read_gpa_adc(channel);
+                self.gpaCalRatios[channel][k] = self.expected_adc_code(dac_values)/(adc_values.sum(1)/averages);
+                print('Received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
 
-			self.write_gpa_dac(0,0x8000); # set gradient current back to 0
+            self.write_gpa_dac(0,0x8000); # set gradient current back to 0
             if np.maximum(self.gpaCalRatios[channel]) > 1.5:
                 print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(ch))
-			plt.plot(dac_values, adc_values.min(1), 'y.')
-			plt.plot(dac_values, adc_values.max(1), 'y.')
-			plt.plot(dac_values, adc_values.sum(1)/averages, 'b.')
-			plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
-			plt.grid(True)
-			plt.show()
+            plt.plot(dac_values, adc_values.min(1), 'y.')
+            plt.plot(dac_values, adc_values.max(1), 'y.')
+            plt.plot(dac_values, adc_values.sum(1)/averages, 'b.')
+            plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
+            plt.grid(True)
+            plt.show()
 
     def clear_tx(self):
         self.tx_offsets = []
@@ -330,7 +332,7 @@ class Experiment:
             elif self.grad_board == 'gpa-fhdo':
                 # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
                 gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
-				gr_dacbits *= self.calulate_correction_factor(ch,gr_dacbits)
+                gr_dacbits *= self.calulate_correction_factor(ch,gr_dacbits)
                 gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
 
             # always broadcast for the final channel
