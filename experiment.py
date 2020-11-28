@@ -229,9 +229,11 @@ class Experiment:
 				for m in range(averages): 
 					adc_values[k, m] = self.read_gpa_adc(channel);
 				self.gpaCalRatios[channel][k] = self.expected_adc_code(dac_values)/(adc_values.sum(1)/averages);
-				print('received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
+				print('Received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
 
 			self.write_gpa_dac(0,0x8000); # set gradient current back to 0
+            if np.maximum(self.gpaCalRatios[channel]) > 1.5:
+                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(ch))
 			plt.plot(dac_values, adc_values.min(1), 'y.')
 			plt.plot(dac_values, adc_values.max(1), 'y.')
 			plt.plot(dac_values, adc_values.sum(1)/averages, 'b.')
