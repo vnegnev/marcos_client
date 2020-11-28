@@ -195,11 +195,11 @@ class Experiment:
         print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
-    def calulate_correction_factor(channel,dac_code):
+    def calulate_correction_factor(self,channel,dac_code):
         """
         calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
         """
-        return np.interp(dac_code,self.self.dac_values,self.gpaCalRatios[channel])
+        return np.interp(dac_code,self.dac_values,self.gpaCalRatios[channel])
 		# left_index = 0;
 		# right_index = self.self.dac_values.len - 1
 		# for k in range(self.self.dac_values.len):
@@ -222,23 +222,23 @@ class Experiment:
         for channel in range(4):
             if False:
                 np.random.shuffle(dac_values) # to ensure randomised acquisition
-            adc_values = np.zeros([dac_values.size, averages])
-            for k, dv in enumerate(dac_values):
-                self.write_gpa_dac(channel,dv);
+            adc_values = np.zeros([self.dac_values.size, averages])
+            for k, dv in enumerate(self.dac_values):
+                self.write_gpa_dac(channel,dv)
                 self.expected_adc_code(dv)
 
                 self.read_gpa_adc(channel); # dummy read
                 for m in range(averages): 
-                    adc_values[k, m] = self.read_gpa_adc(channel);
-                self.gpaCalRatios[channel][k] = self.expected_adc_code(dac_values)/(adc_values.sum(1)/averages);
+                    adc_values[k, m] = self.read_gpa_adc(channel)
+                self.gpaCalRatios[channel][k] = self.expected_adc_code(self.dac_values)/(adc_values.sum(1)/averages)
                 print('Received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
 
             self.write_gpa_dac(0,0x8000); # set gradient current back to 0
             if np.maximum(self.gpaCalRatios[channel]) > 1.5:
-                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(ch))
-            plt.plot(dac_values, adc_values.min(1), 'y.')
-            plt.plot(dac_values, adc_values.max(1), 'y.')
-            plt.plot(dac_values, adc_values.sum(1)/averages, 'b.')
+                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(channel))
+            plt.plot(self.dac_values, adc_values.min(1), 'y.')
+            plt.plot(self.dac_values, adc_values.max(1), 'y.')
+            plt.plot(self.dac_values, adc_values.sum(1)/averages, 'b.')
             plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
             plt.grid(True)
             plt.show()
