@@ -200,25 +200,20 @@ class Experiment:
         calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
         """
         return np.interp(dac_code,self.dac_values,self.gpaCalRatios[channel])
-		# left_index = 0;
-		# right_index = self.self.dac_values.len - 1
-		# for k in range(self.self.dac_values.len):
-			# if self.dac_values[k] <= dac_code:
-				# left_index = k
-			# if self.dac_values[k] >= dac_code:
-				# right_index = k
-				# break
-		# if left_index == right_index:
-			# return self.gpaCalRatios[channel][left_index]
-		# return ( self.gpaCalRatios[channel][rightIndex]- self.gpaCalRatios[channel][leftIndex])/(self.dac_values[rightIndex]-self.dac_values[leftIndex])*(dac_code-self.dac_values[leftIndex])+self.gpaCalRatios[channel][leftIndex];
-	
-    def calibrate_gpa_fhdo(self):
+
+    def ampere_to_dac_code(self,ampere):
+        dac_code = int((ampere/3.75+2.5)/5*0xFFFF)
+        return dac_code
+
+    def calibrate_gpa_fhdo(self,
+        max_current = 2,
+        num_calibration_points = 3):
         """
         performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
         be adapted to the accuracy needed.
         """
         averages = 1
-        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        self.dac_values = np.linspace(-self.ampere_to_dac_code(max_current),self.ampere_to_dac_code(max_current),num_calibration_points)
         for channel in range(self.grad_channels):
             if False:
                 np.random.shuffle(dac_values) # to ensure randomised acquisition
@@ -319,6 +314,8 @@ class Experiment:
 
         grad_bram_data = np.zeros(self.grad_data[0].size * self.grad_channels, dtype=np.uint32)
         # bytearray(self.grad_data[0].size * self.grad_channels * 4)
+        max_dac_code=0
+        min_dac_code=0
         for ch, gd in enumerate(self.grad_data):
             if np.any(np.abs(gd)) > 1.0:
                 warnings.warn("Grad data in Ch {:d} outside [-1,1]!".format(ch))
@@ -333,6 +330,8 @@ class Experiment:
                 # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
                 gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
                 gr_dacbits *= self.calculate_correction_factor(ch,gr_dacbits)
+                max_dac_code = gr_dacbits if gr_dacbits > max_dac_code else max_dac_code
+                min_dac_code = gr_dacbits if gr_dacbits < min_dac_code else min_dac_code
                 gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
 
             # always broadcast for the final channel
@@ -344,6 +343,9 @@ class Experiment:
             if True:
                 if self.grad_board == 'ocra1':
                     grad_bram_data[ch] = 0x00200002 | (ch << 25) | (broadcast << 24)
+        if self.grad_board == 'gpa-fhdo':
+            if max_dac_code > np.max(self.dac_values) or min_dac_code > np.min(self.dac_values):
+                print('Warning: Gradient current is too large, it will be limited!')
 
         self.grad_bytes = grad_bram_data.tobytes()
         self.grad_data_dirty = False

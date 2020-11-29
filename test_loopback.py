@@ -64,8 +64,7 @@ if __name__ == "__main__":
 
     # exp.rx_div_real = 25 # temporary for testing
 
-    exp.init_gpa()
-    exp.calibrate_gpa_fhdo()
+    exp.calibrate_gpa_fhdo(2)   # 2A max current
 
     data = exp.run() # Comment out this line to avoid running on the hardware
 
