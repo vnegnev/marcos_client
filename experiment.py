@@ -64,6 +64,7 @@ class Experiment:
                  local_grad_board=grad_board,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
+                 gpa_current_per_volt=3.75
                  ):
         self.samples = samples
 
@@ -93,6 +94,7 @@ class Experiment:
         # initialize gpa fhdo calibration with ideal values
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
         self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
+        self.gpa_current_per_volt = gpa_current_per_volt
 
         self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
@@ -186,8 +188,7 @@ class Experiment:
         """
         dac_voltage = dac_code/0xFFFF*5
         v_ref = 2.5
-        gpa_current_per_volt = 3.75
-        gpa_current = (dac_voltage-v_ref) * gpa_current_per_volt
+        gpa_current = (dac_voltage-v_ref) * self.gpa_current_per_volt
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
@@ -202,7 +203,7 @@ class Experiment:
         return np.interp(dac_code,self.dac_values,self.gpaCalRatios[channel])
 
     def ampere_to_dac_code(self,ampere):
-        dac_code = int((ampere/3.75+2.5)/5*0xFFFF)
+        dac_code = int((ampere/self.gpa_current_per_volt+2.5)/5*0xFFFF)
         return dac_code
 
     def calibrate_gpa_fhdo(self,
