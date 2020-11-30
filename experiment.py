@@ -81,10 +81,6 @@ class Experiment:
 
         self.instruction_file = instruction_file
         self.asmb = Assembler()
-
-        # initialize gpa fhdo calibration with ideal values
-        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-        self.gpaCalRatios = np.ones((4, self.dac_values.size))
         
         ### Set the gradient controller properties
         grad_clk_t = 0.007 # 7ns period
@@ -93,6 +89,10 @@ class Experiment:
         self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
         self.grad_channels = grad_channels
         assert 0 < grad_channels < 5, "Strange number of grad channels"
+
+        # initialize gpa fhdo calibration with ideal values
+        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
 
         self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
@@ -114,7 +114,7 @@ class Experiment:
         self.spi_div = self.true_spi_div - 1
         self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
 
-        print('spi_div = ',self.spi_div);
+        print('spi_div = ',self.spi_div)
         if self.grad_ser == 0x2 and self.spi_div < 6:
             print('Warning: the fastest possible spi_div for GPA FHDO is 6!')
 
@@ -163,7 +163,7 @@ class Experiment:
         else:
             gs = 2
             init_words = [0x00030100, # DAC sync reg
-                          0x40850000, 0x400b6000, 0x400d6000, 0x400f6000, 0x40116000] # ADC reset, input ranges for each channel
+                          0x40850000, 0x400b0600, 0x400d0600, 0x400f0600, 0x40110600] # ADC reset, input ranges for each channel
 
         # configure grad ctrl divisors
         self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
@@ -190,9 +190,9 @@ class Experiment:
         gpa_current = (dac_voltage-v_ref) * gpa_current_per_volt
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
-        adc_gain = 4.096*1.25
-        adc_code = int(np.round(adc_voltage*0xFFFF/adc_gain))
-        print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
+        adc_gain = 4.096*1.25   # ADC range register setting has to match this
+        adc_code = int(adc_voltage/adc_gain*0xFFFF)
+        #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
     def calculate_correction_factor(self,channel,dac_code):
@@ -207,29 +207,30 @@ class Experiment:
 
     def calibrate_gpa_fhdo(self,
         max_current = 2,
-        num_calibration_points = 3):
+        num_calibration_points = 10):
         """
         performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
         be adapted to the accuracy needed.
         """
-        averages = 1
-        self.dac_values = np.linspace(-self.ampere_to_dac_code(max_current),self.ampere_to_dac_code(max_current),num_calibration_points)
+        averages = 4
+        self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
+        self.dac_values = self.dac_values.astype(int)
+        self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
         for channel in range(self.grad_channels):
             if False:
-                np.random.shuffle(dac_values) # to ensure randomised acquisition
-            adc_values = np.zeros([self.dac_values.size, averages])
+                np.random.shuffle(self.dac_values) # to ensure randomised acquisition
+            adc_values = np.zeros([self.dac_values.size, averages]).astype(np.uint32)
             for k, dv in enumerate(self.dac_values):
                 self.write_gpa_dac(channel,dv)
-                self.expected_adc_code(dv)
-
-                self.read_gpa_adc(channel); # dummy read
+                
+                self.read_gpa_adc(channel) # dummy read
                 for m in range(averages): 
-                    adc_values[k, m] = self.read_gpa_adc(channel)
-                self.gpaCalRatios[channel][k] = self.expected_adc_code(self.dac_values)/(adc_values.sum(1)/averages)
-                print('Received ADC code {:d} -> correction factor {:f}'.format(int((adc_values.sum(1)/averages)[k]),self.gpaCalRatios[channel][k]))
+                    adc_values[k][m] = self.read_gpa_adc(channel)
+                self.gpaCalRatios[channel][k] = self.expected_adc_code(dv)/(adc_values.sum(1)[k]/averages)/2
+                print('Received ADC code {:d} -> correction factor {:f}'.format(int(adc_values.sum(1)[k]/averages),self.gpaCalRatios[channel][k]))
 
-            self.write_gpa_dac(0,0x8000*self.calculate_correction_factor(channel,0x8000)); # set gradient current back to 0
-            if np.maximum(self.gpaCalRatios[channel]) > 1.5:
+            self.write_gpa_dac(channel,0x8000) # set gradient current back to 0
+            if np.amax(self.gpaCalRatios[channel]) > 1.2:
                 print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(channel))
             plt.plot(self.dac_values, adc_values.min(1), 'y.')
             plt.plot(self.dac_values, adc_values.max(1), 'y.')
@@ -329,9 +330,10 @@ class Experiment:
             elif self.grad_board == 'gpa-fhdo':
                 # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
                 gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
-                gr_dacbits *= self.calculate_correction_factor(ch,gr_dacbits)
-                max_dac_code = gr_dacbits if gr_dacbits > max_dac_code else max_dac_code
-                min_dac_code = gr_dacbits if gr_dacbits < min_dac_code else min_dac_code
+                gr_dacbits = np.round(self.calculate_correction_factor(ch,gr_dacbits) * gr_dacbits.astype(np.float)).astype(np.uint32)
+
+                max_dac_code = np.max(gr_dacbits) if np.max(gr_dacbits)  > max_dac_code else max_dac_code
+                min_dac_code = np.min(gr_dacbits) if np.min(gr_dacbits) < min_dac_code else min_dac_code
                 gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
 
             # always broadcast for the final channel

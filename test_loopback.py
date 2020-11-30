@@ -66,9 +66,9 @@ if __name__ == "__main__":
 
     exp.calibrate_gpa_fhdo(2)   # 2A max current
 
-    data = exp.run() # Comment out this line to avoid running on the hardware
+    #data = exp.run() # Comment out this line to avoid running on the hardware
 
-    plt.plot(data.imag)
-    plt.show()
+    #plt.plot(data.imag)
+    #plt.show()
 
     # st()
