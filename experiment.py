@@ -331,6 +331,7 @@ class Experiment:
             elif self.grad_board == 'gpa-fhdo':
                 # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
                 gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
+                gr_dacbits = np.clip(gr_dacbits, self.dac_values[0], self.dac_values[-1])
                 gr_dacbits = np.round(self.calculate_correction_factor(ch,gr_dacbits) * gr_dacbits.astype(np.float)).astype(np.uint32)
 
                 max_dac_code = np.max(gr_dacbits) if np.max(gr_dacbits)  > max_dac_code else max_dac_code
