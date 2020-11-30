@@ -64,7 +64,6 @@ class Experiment:
                  local_grad_board=grad_board,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
-                 gpa_current_per_volt=3.75
                  ):
         self.samples = samples
 
@@ -94,7 +93,6 @@ class Experiment:
         # initialize gpa fhdo calibration with ideal values
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
         self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
-        self.gpa_current_per_volt = gpa_current_per_volt
 
         self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
@@ -208,12 +206,14 @@ class Experiment:
 
     def calibrate_gpa_fhdo(self,
         max_current = 2,
-        num_calibration_points = 10):
+        num_calibration_points = 10,
+        gpa_current_per_volt=3.75):
         """
         performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
         be adapted to the accuracy needed.
         """
         averages = 4
+        self.gpa_current_per_volt = gpa_current_per_volt        
         self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
         self.dac_values = self.dac_values.astype(int)
         self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
