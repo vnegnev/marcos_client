@@ -227,7 +227,7 @@ class Experiment:
                 self.read_gpa_adc(channel) # dummy read
                 for m in range(averages): 
                     adc_values[k][m] = self.read_gpa_adc(channel)
-                self.gpaCalRatios[channel][k] = self.expected_adc_code(dv)/(adc_values.sum(1)[k]/averages)/2
+                self.gpaCalRatios[channel][k] = self.expected_adc_code(dv)/(adc_values.sum(1)[k]/averages)
                 print('Received ADC code {:d} -> correction factor {:f}'.format(int(adc_values.sum(1)[k]/averages),self.gpaCalRatios[channel][k]))
 
             self.write_gpa_dac(channel,0x8000) # set gradient current back to 0
