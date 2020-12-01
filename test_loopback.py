@@ -76,7 +76,7 @@ if __name__ == "__main__":
     exp.write_gpa_dac(channel, dac_code)
 
 
-    #data = exp.run() # Comment out this line to avoid running on the hardware
+    data = exp.run() # Comment out this line to avoid running on the hardware
 
     #plt.plot(data.imag)
     #plt.show()

@@ -192,7 +192,7 @@ class Experiment:
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
-        adc_code = int(adc_voltage/adc_gain*0xFFFF/2)
+        adc_code = (adc_voltage/adc_gain*0xFFFF/2)
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
@@ -200,7 +200,7 @@ class Experiment:
         """
         calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
         """
-        return np.interp(self.expected_adc_code(dac_code),self.gpaCalValues[channel],self.dac_values)
+        return np.interp(self.expected_adc_code(dac_code),self.gpaCalValues[channel],self.dac_values).astype(np.uint32)
 
     def ampere_to_dac_code(self,ampere):
         v_ref = 2.5
@@ -338,7 +338,6 @@ class Experiment:
             elif self.grad_board == 'gpa-fhdo':
                 # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
                 gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
-                gr_dacbits = np.clip(gr_dacbits, self.dac_values[0], self.dac_values[-1])
                 gr_dacbits = self.calculate_corrected_dac_code(ch,gr_dacbits)
 
                 max_dac_code = np.max(gr_dacbits) if np.max(gr_dacbits)  > max_dac_code else max_dac_code

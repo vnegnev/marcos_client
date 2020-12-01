@@ -30,14 +30,14 @@ if __name__ == "__main__":
     B_per_m_per_current = 0.02 # T/m/A, approximate value for tabletop gradient coil
 
     # values for gpa fhdo
-    dac_voltage_per_current = 1/3.75 # V/A, theoretical value for gpa fhdo without 2.5 V offset!
+    gpa_current_per_volt = 3.75 # A/V, theoretical value for gpa fhdo without 2.5 V offset!
     max_dac_voltage = 2.5
 
     # values for ocra1
     # max_dac_voltage = 5
-    # dac_voltage_per_current = 0.2 # fill in value of gradient power amplifier here!
+    # gpa_current_per_volt = 2 # fill in value of gradient power amplifier here!
 
-    max_Hz_per_m = max_dac_voltage / dac_voltage_per_current * B_per_m_per_current * gamma	
+    max_Hz_per_m = max_dac_voltage * gpa_current_per_volt * B_per_m_per_current * gamma	
     # grad_max = max_Hz_per_m # factor used to normalize gradient amplitude, should be max value of the gpa used!	
     grad_max = 10 # unrealistic value used only for loopback test
 
@@ -52,7 +52,7 @@ if __name__ == "__main__":
         clk_t=clk_t,
         tx_t=tx_t,
         grad_t=grad_interval)
-    _, _, cb, readout_samples = ps.assemble('../ocra-pulseq/test_files/test5.seq')
+    _, _, cb, readout_samples = ps.assemble('../ocra-pulseq/test_files/test4.seq')
 
 
     exp = ex.Experiment(samples=readout_samples,
@@ -75,7 +75,9 @@ if __name__ == "__main__":
 
     # exp.rx_div_real = 25 # temporary for testing
     
-    exp.calibrate_gpa_fhdo(2)
+    exp.calibrate_gpa_fhdo(2,
+        num_calibration_points=10,
+        gpa_current_per_volt=gpa_current_per_volt)
     data = exp.run() # Comment out this line to avoid running on the hardware
 
     # plt.plot(data.imag)
