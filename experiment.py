@@ -11,7 +11,7 @@ import scipy.signal as sig
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
+from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board, gpa_current_per_volt
 from ocra_lib.assembler import Assembler
 import server_comms as sc
 
@@ -186,11 +186,11 @@ class Experiment:
         """
         dac_voltage = dac_code/0xFFFF*5
         v_ref = 2.5
-        gpa_current = (dac_voltage-v_ref) * self.gpa_current_per_volt
+        gpa_current = (dac_voltage-v_ref) * gpa_current_per_volt
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
-        adc_code = int(adc_voltage/adc_gain*0xFFFF)
+        adc_code = int(adc_voltage/adc_gain*0xFFFF/2)
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
@@ -201,19 +201,18 @@ class Experiment:
         return np.interp(dac_code,self.dac_values,self.gpaCalRatios[channel])
 
     def ampere_to_dac_code(self,ampere):
-        dac_code = int((ampere/self.gpa_current_per_volt+2.5)/5*0xFFFF)
+        v_ref = 2.5
+        dac_code = int((ampere/gpa_current_per_volt+v_ref)/5*0xFFFF)
         return dac_code
 
     def calibrate_gpa_fhdo(self,
         max_current = 2,
-        num_calibration_points = 10,
-        gpa_current_per_volt=3.75):
+        num_calibration_points = 10):
         """
         performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
         be adapted to the accuracy needed.
         """
-        averages = 4
-        self.gpa_current_per_volt = gpa_current_per_volt        
+        averages = 4     
         self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
         self.dac_values = self.dac_values.astype(int)
         self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
@@ -228,17 +227,18 @@ class Experiment:
                 for m in range(averages): 
                     adc_values[k][m] = self.read_gpa_adc(channel)
                 self.gpaCalRatios[channel][k] = self.expected_adc_code(dv)/(adc_values.sum(1)[k]/averages)
-                print('Received ADC code {:d} -> correction factor {:f}'.format(int(adc_values.sum(1)[k]/averages),self.gpaCalRatios[channel][k]))
+                #print('Received ADC code {:d} -> correction factor {:f}'.format(int(adc_values.sum(1)[k]/averages),self.gpaCalRatios[channel][k]))
 
             self.write_gpa_dac(channel,0x8000) # set gradient current back to 0
-            if np.amax(self.gpaCalRatios[channel]) > 1.2:
+            if np.amax(self.gpaCalRatios[channel]) > 1.1 or np.amin(self.gpaCalRatios[channel]) < 0.9:
                 print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(channel))
-            plt.plot(self.dac_values, adc_values.min(1), 'y.')
-            plt.plot(self.dac_values, adc_values.max(1), 'y.')
-            plt.plot(self.dac_values, adc_values.sum(1)/averages, 'b.')
-            plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
-            plt.grid(True)
-            plt.show()
+            if False:
+                plt.plot(self.dac_values, adc_values.min(1), 'y.')
+                plt.plot(self.dac_values, adc_values.max(1), 'y.')
+                plt.plot(self.dac_values, adc_values.sum(1)/averages, 'b.')
+                plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
+                plt.grid(True)
+                plt.show()
 
     def clear_tx(self):
         self.tx_offsets = []

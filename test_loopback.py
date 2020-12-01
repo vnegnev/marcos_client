@@ -64,7 +64,11 @@ if __name__ == "__main__":
 
     # exp.rx_div_real = 25 # temporary for testing
 
-    exp.calibrate_gpa_fhdo(2)   # 2A max current
+
+    exp.calibrate_gpa_fhdo(max_current = 2,
+        num_calibration_points=10) 
+
+
 
     #data = exp.run() # Comment out this line to avoid running on the hardware
 
