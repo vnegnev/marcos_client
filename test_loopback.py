@@ -66,7 +66,8 @@ if __name__ == "__main__":
 
 
     exp.calibrate_gpa_fhdo(max_current = 2,
-        num_calibration_points=10) 
+        num_calibration_points=10,
+        gpa_current_per_volt=gpa_current_per_volt) 
 
     channel = 0
     current = 0.0 # ampere
