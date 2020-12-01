@@ -68,6 +68,11 @@ if __name__ == "__main__":
     exp.calibrate_gpa_fhdo(max_current = 2,
         num_calibration_points=10) 
 
+    channel = 0
+    current = 0.0 # ampere
+    dac_code = exp.ampere_to_dac_code(current)
+    dac_code = exp.calculate_corrected_dac_code(channel,dac_code)
+    exp.write_gpa_dac(channel, dac_code)
 
 
     #data = exp.run() # Comment out this line to avoid running on the hardware

@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.fft as fft
 import scipy.signal as sig
+from time import sleep
 
 import pdb
 st = pdb.set_trace
@@ -92,7 +93,7 @@ class Experiment:
 
         # initialize gpa fhdo calibration with ideal values
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-        self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
+        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
 
         self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
@@ -194,11 +195,11 @@ class Experiment:
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
     
-    def calculate_correction_factor(self,channel,dac_code):
+    def calculate_corrected_dac_code(self,channel,dac_code):
         """
         calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
         """
-        return np.interp(dac_code,self.dac_values,self.gpaCalRatios[channel])
+        return np.interp(self.expected_adc_code(dac_code),self.gpaCalValues[channel],self.dac_values)
 
     def ampere_to_dac_code(self,ampere):
         v_ref = 2.5
@@ -215,23 +216,26 @@ class Experiment:
         averages = 4     
         self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
         self.dac_values = self.dac_values.astype(int)
-        self.gpaCalRatios = np.ones((self.grad_channels,self.dac_values.size))
+        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
         for channel in range(self.grad_channels):
             if False:
                 np.random.shuffle(self.dac_values) # to ensure randomised acquisition
             adc_values = np.zeros([self.dac_values.size, averages]).astype(np.uint32)
+            gpaCalRatios = np.zeros(self.dac_values.size)
             for k, dv in enumerate(self.dac_values):
                 self.write_gpa_dac(channel,dv)
+                sleep(0.001) # wait 1ms to settle
                 
                 self.read_gpa_adc(channel) # dummy read
                 for m in range(averages): 
                     adc_values[k][m] = self.read_gpa_adc(channel)
-                self.gpaCalRatios[channel][k] = self.expected_adc_code(dv)/(adc_values.sum(1)[k]/averages)
-                #print('Received ADC code {:d} -> correction factor {:f}'.format(int(adc_values.sum(1)[k]/averages),self.gpaCalRatios[channel][k]))
-
+                self.gpaCalValues[channel][k] = adc_values.sum(1)[k]/averages
+                gpaCalRatios[k] = self.gpaCalValues[channel][k]/self.expected_adc_code(dv)
+                #print('Received ADC code {:d} -> expected ADC code {:d}'.format(int(adc_values.sum(1)[k]/averages),self.expected_adc_code(dv)))
             self.write_gpa_dac(channel,0x8000) # set gradient current back to 0
-            if np.amax(self.gpaCalRatios[channel]) > 1.1 or np.amin(self.gpaCalRatios[channel]) < 0.9:
-                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected.'.format(channel))
+
+            if np.amax(gpaCalRatios) > 1.01 or np.amin(gpaCalRatios) < 0.99:
+                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected and gpa_current_per_volt value is correct.'.format(channel))
             if False:
                 plt.plot(self.dac_values, adc_values.min(1), 'y.')
                 plt.plot(self.dac_values, adc_values.max(1), 'y.')
@@ -332,7 +336,7 @@ class Experiment:
                 # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
                 gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
                 gr_dacbits = np.clip(gr_dacbits, self.dac_values[0], self.dac_values[-1])
-                gr_dacbits = np.round(self.calculate_correction_factor(ch,gr_dacbits) * gr_dacbits.astype(np.float)).astype(np.uint32)
+                gr_dacbits = self.calculate_corrected_dac_code(ch,gr_dacbits)
 
                 max_dac_code = np.max(gr_dacbits) if np.max(gr_dacbits)  > max_dac_code else max_dac_code
                 min_dac_code = np.min(gr_dacbits) if np.min(gr_dacbits) < min_dac_code else min_dac_code
