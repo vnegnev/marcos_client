@@ -43,7 +43,7 @@ if __name__ == "__main__":
         clk_t=clk_t,
         tx_t=tx_t,
         grad_t=grad_interval)
-    tx_arr, grad_arr, cb, params = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq', byte_format=False)
+    tx_arr, grad_arr, cb, params = ps.assemble('test_gpa_fhdo.seq', byte_format=False)
 
     # Temporary hack, until next ocra-pulseq update
     if 'rx_t' not in params:
@@ -63,9 +63,25 @@ if __name__ == "__main__":
     exp.add_tx(tx_arr)
     exp.add_grad(grad_arr)
 
+    exp.calibrate_gpa_fhdo(max_current = 2,
+        num_calibration_points=10,
+        gpa_current_per_volt=gpa_current_per_volt) 
+
+    current = 0.1 # ampere
+    # set all channels back to 0.1 A
+    for ch in range(num_grad_channels):
+        dac_code = exp.ampere_to_dac_code(0)
+        dac_code = exp.calculate_corrected_dac_code(ch,dac_code)
+        exp.write_gpa_dac(ch, dac_code)        
+
+    wait = input("All gradient channels are set to 0.1 A. Press Enter to continue.")
+
     data = exp.run() # Comment out this line to avoid running on the hardware
 
-    plt.plot(data.imag)
-    plt.show()
+    # set all channels back to 0 A
+    for ch in range(num_grad_channels):
+        dac_code = exp.ampere_to_dac_code(0)
+        dac_code = exp.calculate_corrected_dac_code(ch,dac_code)
+        exp.write_gpa_dac(ch, dac_code)        
 
     # st()
