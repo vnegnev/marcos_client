@@ -50,6 +50,10 @@ class Experiment:
     high enough to support your desired grad_t but not so high that
     you experience communication issues. Leave this alone unless you
     know what you're doing.
+
+    acq_retry_limit: increase this value if you are getting zeros at
+    the start of your acquisition data, or if you have long pauses in
+    your sequence between successive acquisitions. TODO: More info
     """
 
     def __init__(self,
@@ -62,6 +66,7 @@ class Experiment:
                  grad_channels=4,
                  spi_freq=None, # MHz, best-effort
                  local_grad_board=grad_board,
+                 acq_retry_limit=50000,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  ):
@@ -109,6 +114,8 @@ class Experiment:
 
         self.spi_div = self.true_spi_div - 1
         self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
+
+        self.acq_retry_limit = acq_retry_limit
 
         self.print_infos = print_infos
         self.assert_errors = assert_errors
@@ -299,6 +306,7 @@ class Experiment:
             'grad_ser': self.grad_ser,
             'grad_mem': self.grad_bytes,
             'seq_data': self.instructions,
+            'acq_rlim': self.acq_retry_limit,
             'acq': self.samples})
         
         return np.frombuffer(reply[4]['acq'], np.complex64)
