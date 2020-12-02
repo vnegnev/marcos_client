@@ -43,20 +43,25 @@ if __name__ == "__main__":
         clk_t=clk_t,
         tx_t=tx_t,
         grad_t=grad_interval)
-    _, _, cb, readout_samples = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq')
+    tx_arr, grad_arr, cb, params = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq', byte_format=False)
 
-    exp = ex.Experiment(samples=readout_samples, 
+    # Temporary hack, until next ocra-pulseq update
+    if 'rx_t' not in params:
+        params['rx_t'] = rx_t
+    
+    exp = ex.Experiment(samples=params['readout_number'], 
         lo_freq=lo_freq,
         tx_t=tx_t,
-        rx_t=rx_t, # TODO: get information from PSAssembler
+		rx_t=params['rx_t'],
         grad_channels=num_grad_channels,
         grad_t=grad_interval/num_grad_channels,
         assert_errors=False)
+
     exp.define_instructions(cb)
     x = np.linspace(0,2*np.pi, 100)
     ramp_sine = np.sin(2*x)
-    exp.add_tx(ps.tx_arr)
-    exp.add_grad(ps.gr_arr)
+    exp.add_tx(tx_arr)
+    exp.add_grad(grad_arr)
 
     # plt.plot(ps.gr_arr[0]);plt.show()
 
