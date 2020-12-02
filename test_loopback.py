@@ -63,13 +63,6 @@ if __name__ == "__main__":
     exp.add_tx(tx_arr)
     exp.add_grad(grad_arr)
 
-    # plt.plot(ps.gr_arr[0]);plt.show()
-
-    # for k in range(1):
-
-    # exp.rx_div_real = 25 # temporary for testing
-
-
     exp.calibrate_gpa_fhdo(max_current = 2,
         num_calibration_points=10,
         gpa_current_per_volt=gpa_current_per_volt) 
@@ -83,7 +76,7 @@ if __name__ == "__main__":
 
     data = exp.run() # Comment out this line to avoid running on the hardware
 
-    #plt.plot(data.imag)
-    #plt.show()
+    plt.plot(data.imag)
+    plt.show()
 
     # st()
