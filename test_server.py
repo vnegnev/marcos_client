@@ -26,7 +26,7 @@ class ServerTest(unittest.TestCase):
         self.s.close()
 
     def test_version(self):
-        versions = [ (0,2,0), (0,2,6), (0,3,100), (0,3,255), (1,5,7), (255,255,255) ]
+        versions = [ (0,2,0), (0,2,5), (0,3,100), (0,3,255), (1,5,7), (255,255,255) ]
 
         def diff_info(client_ver):
             return {'infos': ['Client version {:d}.{:d}.{:d}'.format(*client_ver) +
@@ -108,6 +108,7 @@ class ServerTest(unittest.TestCase):
                                    'grad_div': (303, 32),
                                    'grad_ser': 1,
                                    'grad_mem': b"0000"*8192,
+                                   'acq_rlim':10000,
                                    })
         reply = send_packet(packet, self.s)
         
@@ -115,7 +116,7 @@ class ServerTest(unittest.TestCase):
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': 0, 'rx_div': 0,
                            'tx_size': 0, 'raw_tx_data': 0, 'grad_div': 0, 'grad_ser': 0,
-                           'grad_mem': 0},
+                           'grad_mem': 0, 'acq_rlim': 0},
                           {'infos': [
                               'tx data bytes copied: 65536',
                               'gradient mem data bytes copied: 32768']}]
@@ -139,21 +140,25 @@ class ServerTest(unittest.TestCase):
                                    'grad_div': (1024, 0),
                                    'grad_ser': 16,
                                    'grad_mem': b"0000"*8193,
+                                   'acq_rlim': 10,
                                    })
         
         reply = send_packet(packet, self.s)
         
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'lo_freq': 0, 'tx_div': -2, 'rx_div': -1, 'tx_size': -1, 'raw_tx_data': -1, 'grad_div': -1, 'grad_ser': -1, 'grad_mem': -1},
-                          {'errors': ['RX divider outside the range [25, 8192]; check your settings',
+                          {'lo_freq': 0, 'tx_div': -1, 'rx_div': -1, 'tx_size': -1, 'raw_tx_data': -1, 'grad_div': -1, 'grad_ser': -1, 'grad_mem': -1, 'acq_rlim': -1},
+                          {'errors': ['TX divider outside the range [1, 10000]; check your settings',
+                                      'RX divider outside the range [25, 8192]; check your settings',
                                       'TX size outside the range [1, 32767]; check your settings',
                                       'too much raw TX data',
                                       'grad SPI clock divider outside the range [1, 63]; check your settings',
                                       'serialiser enables outside the range [0, 0xf], check your settings',
-                                      'too much grad mem data: 32772 bytes > 32768'],
-                           'warnings': ['TX divider outside the range [1, 10000]; make sure this is what you want',
-                                        ]}])
+                                      'too much grad mem data: 32772 bytes > 32768',
+                                      'acquisition retry limit outside the range [1000, 10,000,000]; check your settings'
+                                      ]}
+                          ])
+                           
 
     # @unittest.skip("not yet decided on how to handle the return values")
     def test_grad_adc(self):        
