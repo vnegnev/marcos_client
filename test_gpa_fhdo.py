@@ -70,11 +70,11 @@ if __name__ == "__main__":
     current = 0.1 # ampere
     # set all channels back to 0.1 A
     for ch in range(num_grad_channels):
-        dac_code = exp.ampere_to_dac_code(0)
+        dac_code = exp.ampere_to_dac_code(current)
         dac_code = exp.calculate_corrected_dac_code(ch,dac_code)
         exp.write_gpa_dac(ch, dac_code)        
 
-    wait = input("All gradient channels are set to 0.1 A. Press Enter to continue.")
+    wait = input('All gradient channels are set to {:f} A. Press Enter to continue.'.format(current))
 
     data = exp.run() # Comment out this line to avoid running on the hardware
 
