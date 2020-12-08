@@ -69,6 +69,7 @@ class Experiment:
                  acq_retry_limit=50000,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
+                 init_gpa=True # initialise the GPA (will reset its outputs when the Experiment object is created)
                  ):
         self.samples = samples
 
@@ -126,7 +127,8 @@ class Experiment:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect( (ip_address, port) )
 
-        self.init_gpa()
+        if init_gpa:
+            self.init_gpa()
 
     def __del__(self):
         self.s.close()
@@ -157,10 +159,8 @@ class Experiment:
     def init_gpa(self):
         """ Setup commands to configure the GPA; only needs to be done once per GPA power-up """
         if self.grad_board == 'ocra1':
-            gs = 1
             init_words = [0x00200002, 0x02200002, 0x04200002, 0x07200002]
-        else:
-            gs = 2
+        elif self.grad_board == 'gpa-fhdo':
             init_words = [0x00030100, # DAC sync reg
                           0x40850000, 0x400b6000, 0x400d6000, 0x400f6000, 0x40116000] # ADC reset, input ranges for each channel
 
@@ -266,11 +266,6 @@ class Experiment:
             broadcast = ch == self.grad_channels - 1                
 
             grad_bram_data[ch::self.grad_channels] = gr | (ch << 25) | (broadcast << 24) # interleave data
-
-            ## initialisation words at address 0 (TODO: test them!)
-            if True:
-                if self.grad_board == 'ocra1':
-                    grad_bram_data[ch] = 0x00200002 | (ch << 25) | (broadcast << 24)
 
         self.grad_bytes = grad_bram_data.tobytes()
         self.grad_data_dirty = False
