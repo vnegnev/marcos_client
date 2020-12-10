@@ -159,10 +159,18 @@ class Experiment:
     def init_gpa(self):
         """ Setup commands to configure the GPA; only needs to be done once per GPA power-up """
         if self.grad_board == 'ocra1':
-            init_words = [0x00200002, 0x02200002, 0x04200002, 0x07200002]
+            init_words = [
+                0x00400004, 0x02400004, 0x04400004, 0x07400004, # reset DACs to power-on values
+                0x00200002, 0x02200002, 0x04200002, 0x07200002, # set internal amplifier
+                0x00100000, 0x02100000, 0x04100000, 0x07100000, # set outputs to 0
+            ] # 
         elif self.grad_board == 'gpa-fhdo':
-            init_words = [0x00030100, # DAC sync reg
-                          0x40850000, 0x400b6000, 0x400d6000, 0x400f6000, 0x40116000] # ADC reset, input ranges for each channel
+            init_words = [
+                0x00030100, # DAC sync reg
+                0x40850000, # ADC reset
+                0x400b6000, 0x400d6000, 0x400f6000, 0x40116000, # input ranges for each channel
+                # TODO: set outputs to ~0
+            ] 
 
         # configure grad ctrl divisors
         self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
