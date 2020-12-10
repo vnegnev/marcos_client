@@ -13,6 +13,7 @@ st = pdb.set_trace
 
 from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 from ocra_lib.assembler import Assembler
+import grad_board as gb
 import server_comms as sc
 
 class Experiment:
@@ -65,11 +66,11 @@ class Experiment:
                  grad_t=2.5, # us, best-effort
                  grad_channels=4,
                  spi_freq=None, # MHz, best-effort
-                 local_grad_board=grad_board,
+                 local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
                  acq_retry_limit=50000,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
-                 init_gpa=True # initialise the GPA (will reset its outputs when the Experiment object is created)
+                 init_gpa=False # initialise the GPA (will reset its outputs when the Experiment object is created)
                  ):
         self.samples = samples
 
@@ -87,35 +88,21 @@ class Experiment:
 
         self.instruction_file = instruction_file
         self.asmb = Assembler()
+
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.s.connect( (ip_address, port) )
         
-        ### Set the gradient controller properties
-        grad_clk_t = 0.007 # 7ns period
-        self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
-        self.grad_div = self.true_grad_div - 4 # what's sent to server
-        self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
-        self.grad_channels = grad_channels
-        assert 0 < grad_channels < 5, "Strange number of grad channels"
+        if local_grad_board == "auto":
+            local_grad_board = grad_board
 
-        self.grad_board = local_grad_board
-        spi_cycles_per_tx = 30 # actually 24, but including some overhead
-        if spi_freq is not None:
-            self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
+        assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
+        if local_grad_board == 'ocra1':
+            gradb_class = gb.OCRA1
         else:
-            # Auto-decide the SPI freq, to be as low as will work
-            assert self.grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
-            if self.grad_board == 'ocra1':
-                # SPI runs in parallel for each channel
-                self.true_spi_div = (self.true_grad_div * grad_channels) // spi_cycles_per_tx
-            elif self.grad_board == 'gpa-fhdo':
-                # SPI must be written sequentially for each channel
-                self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
-
-            if self.true_spi_div > 64:
-                self.true_spi_div = 64 # slowest SPI clock possible
-
-        self.spi_div = self.true_spi_div - 1
-        self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
-
+            gradb_class = gb.GPAFHDO
+        self.gradb = gradb_class(grad_t, grad_channels, self.server_command, spi_freq)
+        self.grad_channels = grad_channels
+        
         self.acq_retry_limit = acq_retry_limit
 
         self.print_infos = print_infos
@@ -124,11 +111,8 @@ class Experiment:
         self.clear_tx()
         self.clear_grad()
 
-        self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.connect( (ip_address, port) )
-
         if init_gpa:
-            self.init_gpa()
+            self.gradb.init_hw()
 
     def __del__(self):
         self.s.close()
@@ -154,30 +138,7 @@ class Experiment:
                 for k in return_status['errors']:
                     warnings.warn("ERROR: " + k)
 
-        return reply
-
-    def init_gpa(self):
-        """ Setup commands to configure the GPA; only needs to be done once per GPA power-up """
-        if self.grad_board == 'ocra1':
-            init_words = [
-                0x00400004, 0x02400004, 0x04400004, 0x07400004, # reset DACs to power-on values
-                0x00200002, 0x02200002, 0x04200002, 0x07200002, # set internal amplifier
-                0x00100000, 0x02100000, 0x04100000, 0x07100000, # set outputs to 0
-            ] # 
-        elif self.grad_board == 'gpa-fhdo':
-            init_words = [
-                0x00030100, # DAC sync reg
-                0x40850000, # ADC reset
-                0x400b6000, 0x400d6000, 0x400f6000, 0x40116000, # input ranges for each channel
-                # TODO: set outputs to ~0
-            ] 
-
-        # configure grad ctrl divisors
-        self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
-            
-        for iw in init_words:
-            # direct commands to grad board
-            self.server_command({'grad_dir': iw})
+        return reply, return_status
 
     def clear_tx(self):
         self.tx_offsets = []
@@ -199,7 +160,7 @@ class Experiment:
         return len(self.tx_offsets) - 1
 
     def clear_grad(self):
-        self.grad_data = [np.empty(1) for k in range(self.grad_channels)]
+        self.grad_data = [np.empty(0) for k in range(self.grad_channels)]
         self.grad_offsets = []
         self.current_grad_offset = 0
         self.grad_data_dirty = True
@@ -222,6 +183,7 @@ class Experiment:
             self.clear_grad()
 
         for k, v in enumerate(vectors):
+            assert np.all( (-1 <= v) & (v <= 1) ), "Grad data out of range"
             self.grad_data[k] = np.hstack( [self.grad_data[k], v] )
 
         return len(self.grad_offsets) - 1
@@ -253,28 +215,8 @@ class Experiment:
         if self.grad_data[0].size == 0:
             self.grad_data = [np.array([0]) for k in range(self.grad_channels)]
 
-        grad_bram_data = np.zeros(self.grad_data[0].size * self.grad_channels, dtype=np.uint32)
-        # bytearray(self.grad_data[0].size * self.grad_channels * 4)
-        for ch, gd in enumerate(self.grad_data):
-            if np.any(np.abs(gd)) > 1.0:
-                warnings.warn("Grad data in Ch {:d} outside [-1,1]!".format(ch))
-
-            if self.grad_board == 'ocra1':
-                # 2's complement
-                # ocra1 16b or 18b -- TODO TEST 18b
-                # gr_dacbits = np.round(32767 * gd).astype(np.uint32) & 0xffff
-                gr_dacbits = np.round(131071 * gd).astype(np.uint32) & 0x3ffff 
-                gr = (gr_dacbits << 2) | 0x00100000
-            elif self.grad_board == 'gpa-fhdo':
-                # Not 2's complement - 0x0 word is -5V, 0xffff is +5V
-                gr_dacbits = np.round(65535 * (gd + 1)).astype(np.uint32) & 0xffff
-                gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
-
-            # always broadcast for the final channel
-            broadcast = ch == self.grad_channels - 1                
-
-            grad_bram_data[ch::self.grad_channels] = gr | (ch << 25) | (broadcast << 24) # interleave data
-
+        grad_bram_data = self.gradb.float2bin(self.grad_data) # grad board-specific transformation
+            
         self.grad_bytes = grad_bram_data.tobytes()
         self.grad_data_dirty = False
         self.grad_data_unsent = True
@@ -299,20 +241,20 @@ class Experiment:
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
         self.auto_compile()        
-        reply = self.server_command({
+        reply, status = self.server_command({
             'lo_freq': self.lo_freq_bin,
             'rx_div': self.rx_div_real,
             'tx_div': self.tx_div,
             'tx_size': self.tx_data.size * 4,
             'raw_tx_data': self.tx_bytes,
-            'grad_div': (self.grad_div, self.spi_div),
-            'grad_ser': self.grad_ser,
+            'grad_div': (self.gradb.grad_div, self.gradb.spi_div),
+            'grad_ser': self.gradb.grad_ser,
             'grad_mem': self.grad_bytes,
             'seq_data': self.instructions,
             'acq_rlim': self.acq_retry_limit,
             'acq': self.samples})
         
-        return np.frombuffer(reply[4]['acq'], np.complex64)
+        return np.frombuffer(reply[4]['acq'], np.complex64), status
 
 def test_Experiment():
     exp = Experiment(samples=500)

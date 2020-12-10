@@ -158,7 +158,21 @@ class ServerTest(unittest.TestCase):
                                       'acquisition retry limit outside the range [1000, 10,000,000]; check your settings'
                                       ]}
                           ])
-                           
+
+    def test_grad_adc(self):
+        if grad_board != "gpa-fhdo":
+            return
+
+        # set up SPI
+        send_packet(construct_packet({'grad_div': (200, 10), 'grad_ser': 2}), self.s)
+
+        # ADC defaults
+        words = [0x850000, 0x050000, 0x030100, 0x0b0600, 0x0d0600, 0x0f0600, 0x110600]
+        for w in words:
+            send_packet(construct_packet({'grad_dir': 0x40000000 | w}), self.s)
+            readback = send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
+            if readback != w:
+                warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(readback, w) )
 
     def test_state(self):        
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
