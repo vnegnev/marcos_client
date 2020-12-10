@@ -51,28 +51,61 @@ if __name__ == "__main__":
                      grad_pad=2,
                      addresses_per_grad_sample=3)
     tx_arr, grad_arr, cb, params = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq', byte_format=False)
-
-    # Temporary hack, until next ocra-pulseq update
-    if 'rx_t' not in params:
-        params['rx_t'] = rx_t
     
-    exp = ex.Experiment(samples=params['readout_number'], 
-        lo_freq=lo_freq,
-        tx_t=tx_t,
-		rx_t=params['rx_t'],
-        grad_channels=num_grad_channels,
-        grad_t=grad_interval/num_grad_channels,
-        assert_errors=False)
-
+    exp = ex.Experiment(samples=params['readout_number'], # TODO: get information from PSAssembler
+                        lo_freq=lo_freq,
+                        tx_t=tx_t,
+                        rx_t=params['rx_t'],
+                        grad_channels=grad_channels,
+                        grad_t=grad_interval/grad_channels,
+                        assert_errors=False,
+                        print_infos=True)
+    
     exp.define_instructions(cb)
-    x = np.linspace(0,2*np.pi, 100)
-    ramp_sine = np.sin(2*x)
+
+    if False: # test sine for grad/tx
+        x = np.linspace(0,2*np.pi, 100)
+        ramp_sine = np.sin(2*x)
+    
     exp.add_tx(tx_arr)
     exp.add_grad(grad_arr)
 
-    data = exp.run() # Comment out this line to avoid running on the hardware
+    if do_single_test:
+        exp.run()
+        
+    if do_jitter_test:
+        data = []
+        trials = 1000
+        for k in range(trials):
+            data.append( exp.run() ) # Comment out this line to avoid running on the hardware
+        
+        taxis = np.arange(params['readout_number'])*params['rx_t']
+        plt.figure(figsize=(10,9))
 
-    plt.plot(data.imag)
-    plt.show()
+        good_data = []
+        bad_data = []
 
-    # st()
+        for d in data:
+            if np.abs(d[-1]) == 0.0:
+                bad_data.append(d)
+            else:
+                good_data.append(d)
+
+        lgd = len(good_data)
+        lbd = len(bad_data)
+                
+        plt.subplot(2,1,1)
+        for d in good_data:
+            plt.plot(taxis, d.real )
+        plt.ylabel('loopback rx amplitude')
+        plt.title('passing loopback data ({:d}/{:d}, {:.2f}%)'.format(lgd, lgd+lbd, 100*lgd/(lgd+lbd)))
+        plt.grid(True)
+
+        plt.subplot(2,1,2)
+        for d in bad_data:
+            plt.plot(taxis, d.real )
+        plt.ylabel('loopback rx amplitude')
+        plt.title('failing loopback data ({:d}/{:d}, {:.2f}%)'.format(lbd, lgd+lbd, 100*lbd/(lgd+lbd)))
+        plt.grid(True)        
+        
+        plt.show()

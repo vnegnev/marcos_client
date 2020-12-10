@@ -158,101 +158,21 @@ class ServerTest(unittest.TestCase):
                                       'acquisition retry limit outside the range [1000, 10,000,000]; check your settings'
                                       ]}
                           ])
-                           
 
-    # @unittest.skip("not yet decided on how to handle the return values")
-    def test_grad_adc(self):        
-        import time
-        def wait():
-            time.sleep(0.005)
-        # # configure
+    def test_grad_adc(self):
+        if grad_board != "gpa-fhdo":
+            return
+
+        # set up SPI
         send_packet(construct_packet({'grad_div': (200, 10), 'grad_ser': 2}), self.s)
 
-        # DAC writes
-        val1, val2, val3 = 0x8000, 0x7800, 0x8000
-        # send_packet(construct_packet({'grad_dir': 0x00030100}), self.s) # sync reg
-        send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
-        send_packet(construct_packet({'grad_dir': 0x00080000 | val1}), self.s) # output 0
-        send_packet(construct_packet({'grad_dir': 0x00090000 | val1}), self.s) # output 1
-        send_packet(construct_packet({'grad_dir': 0x000a0000 | val1}), self.s) # output 2
-        send_packet(construct_packet({'grad_dir': 0x000b0000 | val1 }), self.s) # output 3
-
-        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
-        send_packet(construct_packet({'grad_dir': 0x00080000 | val2}), self.s) # output 0
-        send_packet(construct_packet({'grad_dir': 0x00090000 | val2}), self.s) # output 1
-        send_packet(construct_packet({'grad_dir': 0x000a0000 | val2}), self.s) # output 2
-        send_packet(construct_packet({'grad_dir': 0x000b0000 | val2}), self.s) # output 3            
-
-        # send_packet(construct_packet({'grad_dir': 0x00020000}), self.s) # sync reg
-        send_packet(construct_packet({'grad_dir': 0x00080000 | val3}), self.s) # output 0
-        send_packet(construct_packet({'grad_dir': 0x00090000 | val3}), self.s) # output 1
-        send_packet(construct_packet({'grad_dir': 0x000a0000 | val3}), self.s) # output 2
-        send_packet(construct_packet({'grad_dir': 0x000b0000 | val3}), self.s) # output 3
-        
-        if True:
-            # wait()
-            send_packet(construct_packet({'grad_dir': 0x00088000}), self.s)        
-            # send_packet(construct_packet({'grad_dir': 0x02004800}), self.s)
-            # send_packet(construct_packet({'grad_dir': 0x04004800}), self.s)
-            # send_packet(construct_packet({'grad_dir': 0x07004800}), self.s)
-
-            # ADC defaults
-            send_packet(construct_packet({'grad_dir': 0x40850000}), self.s) # reset
-            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
-
-            # input range config
-            send_packet(construct_packet({'grad_dir': 0x400b6000}), self.s) # ch0 input range
-            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
-            send_packet(construct_packet({'grad_dir': 0x400d6000}), self.s) # ch1 input range
-            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
-            send_packet(construct_packet({'grad_dir': 0x400f6000}), self.s) # ch2 input range
-            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
-            send_packet(construct_packet({'grad_dir': 0x40116000}), self.s) # ch3 input range
-            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))
-
-            # power-up all channels
-            send_packet(construct_packet({'grad_dir': 0x40050000}), self.s) # power on all channels
-            print('ADC: 0x{:x}'.format(send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']))            
-
-        if False:
-            # # ADC read 
-            send_packet(construct_packet({'grad_dir': 0x40c00000}), self.s)
-            send_packet(construct_packet({'grad_dir': 0x40c00000}), self.s)
-            print('ADC 0: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
-
-            send_packet(construct_packet({'grad_dir': 0x40c40000}), self.s)
-            send_packet(construct_packet({'grad_dir': 0x40c40000}), self.s)
-            print('ADC 1: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
-
-            send_packet(construct_packet({'grad_dir': 0x40c80000}), self.s)
-            send_packet(construct_packet({'grad_dir': 0x40c80000}), self.s)
-            print('ADC 2: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
-
-            send_packet(construct_packet({'grad_dir': 0x40cc0000}), self.s)
-            send_packet(construct_packet({'grad_dir': 0x40cc0000}), self.s)
-            print('ADC 3: ', send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'])
-
-        if True:
-            # DAC write followed by ADC read, ch0
-            averages = 10
-            dac_values = np.arange(0x7f00, 0x8100)
-            if True:
-                np.random.shuffle(dac_values) # to ensure randomised acquisition
-            adc_values = np.zeros([dac_values.size, averages])
-            for k, dv in enumerate(dac_values):
-                send_packet(construct_packet({'grad_dir': 0x00080000 | int(dv)}), self.s) # DAC output
-
-                send_packet(construct_packet({'grad_dir': 0x40c00000}), self.s) # first ADC dummy read
-                for m in range(averages): # average 10x
-                    send_packet(construct_packet({'grad_dir': 0x40c00000}), self.s) # ADC read new value
-                    adc_values[k, m] = send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
-
-            plt.plot(dac_values, adc_values.min(1), 'y.')
-            plt.plot(dac_values, adc_values.max(1), 'y.')
-            plt.plot(dac_values, adc_values.sum(1)/averages, 'b.')
-            plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
-            plt.grid(True)
-            plt.show()
+        # ADC defaults
+        words = [0x850000, 0x050000, 0x030100, 0x0b0600, 0x0d0600, 0x0f0600, 0x110600]
+        for w in words:
+            send_packet(construct_packet({'grad_dir': 0x40000000 | w}), self.s)
+            readback = send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
+            if readback != w:
+                warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(readback, w) )
 
     def test_state(self):        
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
