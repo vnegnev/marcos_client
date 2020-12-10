@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import scipy.fft as fft
 import scipy.signal as sig
+from time import sleep
 
 import pdb
 st = pdb.set_trace
@@ -69,7 +70,6 @@ class Experiment:
                  acq_retry_limit=50000,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
-                 init_gpa=True # initialise the GPA (will reset its outputs when the Experiment object is created)
                  ):
         self.samples = samples
 
@@ -96,6 +96,11 @@ class Experiment:
         self.grad_channels = grad_channels
         assert 0 < grad_channels < 5, "Strange number of grad channels"
 
+        self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
+        # initialize gpa fhdo calibration with ideal values
+        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
+
         self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
         if spi_freq is not None:
@@ -110,11 +115,15 @@ class Experiment:
                 # SPI must be written sequentially for each channel
                 self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
 
-            if self.true_spi_div > 64:
-                self.true_spi_div = 64 # slowest SPI clock possible
+            if self.true_spi_div > 63:
+                self.true_spi_div = 63 # slowest SPI clock possible
 
         self.spi_div = self.true_spi_div - 1
         self.grad_ser = 0x2 if self.grad_board == 'gpa-fhdo' else 0x1 # select which board serialiser is activated on the firmware
+
+        print('spi_div = ',self.spi_div)
+        if self.grad_ser == 0x2 and self.spi_div < 6:
+            print('Warning: the fastest possible spi_div for GPA FHDO is 6!')
 
         self.acq_retry_limit = acq_retry_limit
 
@@ -127,8 +136,7 @@ class Experiment:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect( (ip_address, port) )
 
-        if init_gpa:
-            self.init_gpa()
+        self.init_gpa()
 
     def __del__(self):
         self.s.close()
@@ -159,18 +167,12 @@ class Experiment:
     def init_gpa(self):
         """ Setup commands to configure the GPA; only needs to be done once per GPA power-up """
         if self.grad_board == 'ocra1':
-            init_words = [
-                0x00400004, 0x02400004, 0x04400004, 0x07400004, # reset DACs to power-on values
-                0x00200002, 0x02200002, 0x04200002, 0x07200002, # set internal amplifier
-                0x00100000, 0x02100000, 0x04100000, 0x07100000, # set outputs to 0
-            ] # 
-        elif self.grad_board == 'gpa-fhdo':
-            init_words = [
-                0x00030100, # DAC sync reg
-                0x40850000, # ADC reset
-                0x400b6000, 0x400d6000, 0x400f6000, 0x40116000, # input ranges for each channel
-                # TODO: set outputs to ~0
-            ] 
+            gs = 1
+            init_words = [0x00200002, 0x02200002, 0x04200002, 0x07200002]
+        else:
+            gs = 2
+            init_words = [0x00030100, # DAC sync reg
+                          0x40850000, 0x400b0600, 0x400d0600, 0x400f0600, 0x40110600] # ADC reset, input ranges for each channel
 
         # configure grad ctrl divisors
         self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
@@ -178,6 +180,79 @@ class Experiment:
         for iw in init_words:
             # direct commands to grad board
             self.server_command({'grad_dir': iw})
+    
+    def read_gpa_adc(self, channel):
+        sc.send_packet(sc.construct_packet({'grad_dir': 0x40c00000 | (channel<<18)}), self.s)
+        return sc.send_packet(sc.construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
+    
+    def write_gpa_dac(self, channel, value):
+        sc.send_packet(sc.construct_packet({'grad_dir': 0x00080000 | (channel<<16) | int(value)}), self.s) # DAC output
+    
+    def expected_adc_code(self, dac_code):
+        """
+        a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
+        The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
+        """
+        dac_voltage = dac_code/0xFFFF*5
+        v_ref = 2.5
+        gpa_current = (dac_voltage-v_ref) * self.gpa_current_per_volt
+        r_shunt = 0.2
+        adc_voltage = gpa_current*r_shunt+v_ref
+        adc_gain = 4.096*1.25   # ADC range register setting has to match this
+        adc_code = (adc_voltage/adc_gain*0xFFFF/2)
+        #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
+        return adc_code
+    
+    def calculate_corrected_dac_code(self,channel,dac_code):
+        """
+        calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
+        """
+        return np.interp(self.expected_adc_code(dac_code),self.gpaCalValues[channel],self.dac_values).astype(np.uint32)
+
+    def ampere_to_dac_code(self,ampere):
+        v_ref = 2.5
+        dac_code = int((ampere/self.gpa_current_per_volt+v_ref)/5*0xFFFF)
+        return dac_code
+
+    def calibrate_gpa_fhdo(self,
+        max_current = 2,
+        num_calibration_points = 10,
+        gpa_current_per_volt = 3.75):
+        """
+        performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
+        be adapted to the accuracy needed.
+        """
+        averages = 4     
+        self.gpa_current_per_volt = gpa_current_per_volt
+        self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
+        self.dac_values = self.dac_values.astype(int)
+        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
+        for channel in range(self.grad_channels):
+            if False:
+                np.random.shuffle(self.dac_values) # to ensure randomised acquisition
+            adc_values = np.zeros([self.dac_values.size, averages]).astype(np.uint32)
+            gpaCalRatios = np.zeros(self.dac_values.size)
+            for k, dv in enumerate(self.dac_values):
+                self.write_gpa_dac(channel,dv)
+                sleep(0.001) # wait 1ms to settle
+                
+                self.read_gpa_adc(channel) # dummy read
+                for m in range(averages): 
+                    adc_values[k][m] = self.read_gpa_adc(channel)
+                self.gpaCalValues[channel][k] = adc_values.sum(1)[k]/averages
+                gpaCalRatios[k] = self.gpaCalValues[channel][k]/self.expected_adc_code(dv)
+                #print('Received ADC code {:d} -> expected ADC code {:d}'.format(int(adc_values.sum(1)[k]/averages),self.expected_adc_code(dv)))
+            self.write_gpa_dac(channel,0x8000) # set gradient current back to 0
+
+            if np.amax(gpaCalRatios) > 1.01 or np.amin(gpaCalRatios) < 0.99:
+                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected and gpa_current_per_volt value is correct.'.format(channel))
+            if False:
+                plt.plot(self.dac_values, adc_values.min(1), 'y.')
+                plt.plot(self.dac_values, adc_values.max(1), 'y.')
+                plt.plot(self.dac_values, adc_values.sum(1)/averages, 'b.')
+                plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
+                plt.grid(True)
+                plt.show()
 
     def clear_tx(self):
         self.tx_offsets = []
@@ -255,6 +330,8 @@ class Experiment:
 
         grad_bram_data = np.zeros(self.grad_data[0].size * self.grad_channels, dtype=np.uint32)
         # bytearray(self.grad_data[0].size * self.grad_channels * 4)
+        max_dac_code=0
+        min_dac_code=0
         for ch, gd in enumerate(self.grad_data):
             if np.any(np.abs(gd)) > 1.0:
                 warnings.warn("Grad data in Ch {:d} outside [-1,1]!".format(ch))
@@ -266,14 +343,26 @@ class Experiment:
                 gr_dacbits = np.round(131071 * gd).astype(np.uint32) & 0x3ffff 
                 gr = (gr_dacbits << 2) | 0x00100000
             elif self.grad_board == 'gpa-fhdo':
-                # Not 2's complement - 0x0 word is -5V, 0xffff is +5V
-                gr_dacbits = np.round(65535 * (gd + 1)).astype(np.uint32) & 0xffff
+                # Not 2's complement - 0x0 word is 0V, 0xffff is +5V
+                gr_dacbits = np.round(0xffff * (gd + 1) / 2).astype(np.uint32) & 0xffff
+                gr_dacbits = self.calculate_corrected_dac_code(ch,gr_dacbits)
+
+                max_dac_code = np.max(gr_dacbits) if np.max(gr_dacbits)  > max_dac_code else max_dac_code
+                min_dac_code = np.min(gr_dacbits) if np.min(gr_dacbits) < min_dac_code else min_dac_code
                 gr = gr_dacbits | 0x80000 | (ch << 16) # also handled in gpa_fhdo serialiser, but setting the channel here just in case
 
             # always broadcast for the final channel
             broadcast = ch == self.grad_channels - 1                
 
             grad_bram_data[ch::self.grad_channels] = gr | (ch << 25) | (broadcast << 24) # interleave data
+
+            ## initialisation words at address 0 (TODO: test them!)
+            if True:
+                if self.grad_board == 'ocra1':
+                    grad_bram_data[ch] = 0x00200002 | (ch << 25) | (broadcast << 24)
+        if self.grad_board == 'gpa-fhdo':
+            if max_dac_code > np.max(self.dac_values) or min_dac_code > np.min(self.dac_values):
+                print('Warning: Gradient current is too large, it will be limited!')
 
         self.grad_bytes = grad_bram_data.tobytes()
         self.grad_data_dirty = False
