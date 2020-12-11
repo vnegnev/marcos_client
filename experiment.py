@@ -162,7 +162,7 @@ class Experiment:
                 for k in return_status['errors']:
                     warnings.warn("ERROR: " + k)
 
-        return reply
+        return reply, return_status
 
     def init_gpa(self):
         """ Setup commands to configure the GPA; only needs to be done once per GPA power-up """
@@ -388,7 +388,7 @@ class Experiment:
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
         self.auto_compile()        
-        reply = self.server_command({
+        reply, status = self.server_command({
             'lo_freq': self.lo_freq_bin,
             'rx_div': self.rx_div_real,
             'tx_div': self.tx_div,
@@ -401,7 +401,7 @@ class Experiment:
             'acq_rlim': self.acq_retry_limit,
             'acq': self.samples})
         
-        return np.frombuffer(reply[4]['acq'], np.complex64)
+        return np.frombuffer(reply[4]['acq'], np.complex64), status
 
 def test_Experiment():
     exp = Experiment(samples=500)
