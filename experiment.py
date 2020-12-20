@@ -95,12 +95,13 @@ class Experiment:
         if local_grad_board == "auto":
             local_grad_board = grad_board
 
-        assert self.grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
-        if self.grad_board == 'ocra1':
+        assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
+        if local_grad_board == 'ocra1':
             gradb_class = gb.OCRA1
         else:
             gradb_class = gb.GPAFHDO
         self.gradb = gradb_class(grad_t, grad_channels, self.server_command, spi_freq)
+        self.grad_channels = grad_channels
         
         self.acq_retry_limit = acq_retry_limit
 
@@ -182,7 +183,7 @@ class Experiment:
             self.clear_grad()
 
         for k, v in enumerate(vectors):
-            assert np.all( (-1 <= v) and (v <= 1) ), "Grad data out of range"
+            assert np.all( (-1 <= v) & (v <= 1) ), "Grad data out of range"
             self.grad_data[k] = np.hstack( [self.grad_data[k], v] )
 
         return len(self.grad_offsets) - 1
@@ -246,8 +247,8 @@ class Experiment:
             'tx_div': self.tx_div,
             'tx_size': self.tx_data.size * 4,
             'raw_tx_data': self.tx_bytes,
-            'grad_div': (self.grad_div, self.spi_div),
-            'grad_ser': self.grad_ser,
+            'grad_div': (self.gradb.grad_div, self.gradb.spi_div),
+            'grad_ser': self.gradb.grad_ser,
             'grad_mem': self.grad_bytes,
             'seq_data': self.instructions,
             'acq_rlim': self.acq_retry_limit,

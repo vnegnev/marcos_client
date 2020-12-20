@@ -113,8 +113,9 @@ class OCRA1:
 
 class GPAFHDO:
     def __init__(self,
-                 grad_t=2.5,
-                 grad_channels=4,
+                 grad_t,
+                 grad_channels,
+                 server_command_f,                 
                  spi_freq=None):
 
         grad_clk_t = 0.007 # 7ns period
@@ -129,7 +130,6 @@ class GPAFHDO:
         self.dac_values = np.array([0x7000, 0x8000, 0x9000])
         self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
 
-        self.grad_board = local_grad_board
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
         if spi_freq is not None:
             self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
@@ -146,7 +146,8 @@ class GPAFHDO:
         if self.spi_div < 6:
             warnings.warn('the fastest possible spi_div for GPA FHDO is 6 - check your settings!')
 
-        self.s = socket
+        # bind function from Experiment class, or replace with something else for debugging
+        self.server_command = server_command_f 
 
     def init_hw(self):
         init_words = [

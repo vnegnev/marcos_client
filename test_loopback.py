@@ -17,6 +17,13 @@ if __name__ == "__main__":
     num_grad_channels = 3
     grad_interval = 10.003 # us between [num_grad_channels] channel updates
 
+    do_single_test = True
+    do_jitter_test = False
+
+    if len(sys.argv) > 1 and "jitter" in sys.argv:
+        do_jitter_test = True
+        do_single_test = False
+    
     if False: # VN: this stuff belongs in a more sophisticated test, not test_loopback. TODO: refactor/remove
         gamma = 42570000 # Hz/T
 
@@ -56,8 +63,8 @@ if __name__ == "__main__":
                         lo_freq=lo_freq,
                         tx_t=tx_t,
                         rx_t=params['rx_t'],
-                        grad_channels=grad_channels,
-                        grad_t=grad_interval/grad_channels,
+                        grad_channels=num_grad_channels,
+                        grad_t=grad_interval/num_grad_channels,
                         assert_errors=False,
                         print_infos=True)
     
