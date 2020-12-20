@@ -33,6 +33,8 @@
 # TODO: actually use class inheritance here, instead of two separate classes
 
 import numpy as np
+import time
+import matplotlib.pyplot as plt
 
 class OCRA1:
     def __init__(self,
@@ -219,16 +221,16 @@ class GPAFHDO:
             adc_values = np.zeros([self.dac_values.size, averages]).astype(np.uint32)
             gpaCalRatios = np.zeros(self.dac_values.size)
             for k, dv in enumerate(self.dac_values):
-                self.write_gpa_dac(channel,dv)
-                sleep(settle_time) # wait 1ms to settle
+                self.write_dac(channel,dv)
+                time.sleep(settle_time) # wait 1ms to settle
                 
-                self.read_gpa_adc(channel) # dummy read
+                self.read_adc(channel) # dummy read
                 for m in range(averages): 
-                    adc_values[k][m] = self.read_gpa_adc(channel)
+                    adc_values[k][m] = self.read_adc(channel)
                 self.gpaCalValues[channel][k] = adc_values.sum(1)[k]/averages
                 gpaCalRatios[k] = self.gpaCalValues[channel][k]/self.expected_adc_code_from_dac_code(dv)
                 #print('Received ADC code {:d} -> expected ADC code {:d}'.format(int(adc_values.sum(1)[k]/averages),self.expected_adc_code(dv)))
-            self.write_gpa_dac(channel,0x8000) # set gradient current back to 0
+            self.write_dac(channel,0x8000) # set gradient current back to 0
 
             if np.amax(gpaCalRatios) > 1.01 or np.amin(gpaCalRatios) < 0.99:
                 print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected and gpa_current_per_volt value is correct.'.format(channel))
