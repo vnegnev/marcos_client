@@ -185,7 +185,7 @@ class GPAFHDO:
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
-        adc_code = (adc_voltage/adc_gain * 0xffff/2)
+        adc_code = np.round(adc_voltage/adc_gain * 0xffff/2).astype(np.int)
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
 
@@ -229,11 +229,11 @@ class GPAFHDO:
                     adc_values[k][m] = self.read_adc(channel)
                 self.gpaCalValues[channel][k] = adc_values.sum(1)[k]/averages
                 gpaCalRatios[k] = self.gpaCalValues[channel][k]/self.expected_adc_code_from_dac_code(dv)
-                #print('Received ADC code {:d} -> expected ADC code {:d}'.format(int(adc_values.sum(1)[k]/averages),self.expected_adc_code(dv)))
+                #print('Received ADC code {:d} -> expected ADC code {:d}'.format(int(adc_values.sum(1)[k]/averages),self.expected_adc_code_from_dac_code(dv)))
             self.write_dac(channel,0x8000) # set gradient current back to 0
 
             if np.amax(gpaCalRatios) > 1.01 or np.amin(gpaCalRatios) < 0.99:
-                print('Calibration for channel {:d} seems to be incorrect. Make sure a gradient coil is connected and gpa_current_per_volt value is correct.'.format(channel))
+                print('Calibration for channel {:d} seems to be incorrect. Calibrationfactor is {:f}. Make sure a gradient coil is connected and gpa_current_per_volt value is correct.'.format(channel,np.amax(gpaCalRatios)))
             if plot:
                 plt.plot(self.dac_values, adc_values.min(1), 'y.')
                 plt.plot(self.dac_values, adc_values.max(1), 'y.')

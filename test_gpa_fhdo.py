@@ -66,6 +66,7 @@ if __name__ == "__main__":
     exp.gradb.calibrate(max_current = 2,
         num_calibration_points=10,
         gpa_current_per_volt=gpa_current_per_volt,
+        averages=4,
         plot=True) 
 
     current = 0.1 # ampere
