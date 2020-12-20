@@ -77,7 +77,9 @@ if __name__ == "__main__":
         data = []
         trials = 1000
         for k in range(trials):
-            data.append( exp.run() ) # Comment out this line to avoid running on the hardware
+            d, s = exp.run()
+            # TODO: retake when warnings occur due to timeouts etc
+            data.append( d ) # Comment out this line to avoid running on the hardware
         
         taxis = np.arange(params['readout_number'])*params['rx_t']
         plt.figure(figsize=(10,9))
