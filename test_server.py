@@ -6,11 +6,12 @@
 import socket, time, unittest
 import numpy as np
 import matplotlib.pyplot as plt
+import warnings
 
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port, fpga_clk_freq_MHz
+from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 from server_comms import *
 
 class ServerTest(unittest.TestCase):
@@ -167,12 +168,15 @@ class ServerTest(unittest.TestCase):
         send_packet(construct_packet({'grad_div': (200, 10), 'grad_ser': 2}), self.s)
 
         # ADC defaults
-        words = [0x850000, 0x050000, 0x030100, 0x0b0600, 0x0d0600, 0x0f0600, 0x110600]
+        words = [ 0x00850000, # ADC reset
+                  0x000b0600, 0x000d0600, 0x000f0600, 0x00110600, # input ranges for each ADC channel
+                 ] # TODO: set outputs to ~0
+        
         for w in words:
             send_packet(construct_packet({'grad_dir': 0x40000000 | w}), self.s)
             readback = send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
             if readback != w:
-                warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(readback, w) )
+                warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(w, readback) )
 
     def test_state(self):        
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
