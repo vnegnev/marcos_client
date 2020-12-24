@@ -164,19 +164,24 @@ class ServerTest(unittest.TestCase):
         if grad_board != "gpa-fhdo":
             return
 
-        # set up SPI
-        send_packet(construct_packet({'grad_div': (200, 10), 'grad_ser': 2}), self.s)
+        # set up SPI to deliberately be too fast for the ADC -- latest server should automatically compensate
+        send_packet(construct_packet({'grad_div': (200, 5), 'grad_ser': 2}), self.s)
 
-        # ADC defaults
-        words = [ 0x00850000, # ADC reset
-                  0x000b0600, 0x000d0600, 0x000f0600, 0x00110600, # input ranges for each ADC channel
+        # # ADC defaults
+        words = [ 0x40850000, # ADC reset
+                  0x400b0600, 0x400d0600, 0x400f0600, 0x40110600, # input ranges for each ADC channel
                  ] # TODO: set outputs to ~0
+
+        expected = [ 0xffff, 0x0600, 0x0600, 0x0600, 0x0600 ]
+        readback = []
         
         for w in words:
-            send_packet(construct_packet({'grad_dir': 0x40000000 | w}), self.s)
-            readback = send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc']
-            if readback != w:
-                warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(w, readback) )
+            send_packet(construct_packet({'grad_dir': w}), self.s)
+            readback.append( send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'] )
+            # if readback != r:
+            #     warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(w, readback) )
+
+        self.assertEqual(expected, readback)
 
     def test_state(self):        
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)

@@ -185,7 +185,7 @@ class GPAFHDO:
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
-        adc_code = np.round(adc_voltage/adc_gain * 0xffff/2).astype(np.int)
+        adc_code = np.round(adc_voltage/adc_gain * 0xffff).astype(np.int)
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
 
