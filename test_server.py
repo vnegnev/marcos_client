@@ -67,24 +67,20 @@ class ServerTest(unittest.TestCase):
                          
 
     
-    def test_net(self):
-        packet = construct_packet({'test_net':10}, self.packet_idx)
+    def test_bus(self):
+        loops = 1000000
+        packet = construct_packet({'test_bus':loops}, self.packet_idx)
         reply = send_packet(packet, self.s)
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full,
-                          {'test_net':
-                           {'array1': [0.0, 1.01, 2.02, 3.0300000000000002, 4.04, 5.05, 6.0600000000000005, 7.07, 8.08, 9.09],
-                            'array2': [10.1, 11.11, 12.120000000000001, 13.13, 14.14, 15.15, 16.16, 17.17, 18.18, 19.19]}}, {}]
-        )
+        null_t, read_t, write_t = reply[4]['test_bus']
 
-        for k in range(7):
-            with self.subTest(i=k):
-                ke = 10**k
-                kf = ke - 1
-                packet = construct_packet({'test_net': ke}, self.packet_idx)
-                reply = send_packet(packet, self.s)
-                self.assertAlmostEqual(reply[4]['test_net']['array1'][-1], 1.01 * kf)
-                self.assertAlmostEqual(reply[4]['test_net']['array2'][-1], 1.01 * (kf+10) )
+        # print("{:d}, {:d}, {:d}".format(null_t, read_t, write_t))
+        self.assertAlmostEqual(null_t, 1, delta=1) # 1 million numerical operations take ~1 us (might be getting optimised out)
+        loops_norm = loops/1e6
+        self.assertAlmostEqual(read_t/1e3, 141.9 * loops_norm, delta = 2 * loops_norm) # 1 read takes ~141.9 ns on average
+        self.assertAlmostEqual(write_t/1e3, 157.9 * loops_norm, delta = 2 * loops_norm) # 1 write takes ~157.9 ns on average
+
+    def test_io(self):
+        packet = construct_packet({'test_net':10}, self.packet_idx)
 
     def test_fpga_clk(self):
         packet = construct_packet({'fpga_clk': [0xdf0d, 0x03f03f30, 0x00100700]})
