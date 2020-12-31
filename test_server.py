@@ -27,7 +27,7 @@ class ServerTest(unittest.TestCase):
         self.s.close()
 
     def test_version(self):
-        versions = [ (0,2,0), (0,2,5), (0,3,100), (0,3,255), (1,5,7), (255,255,255) ]
+        versions = [ (1,0,1), (1,0,5), (1,3,100), (1,3,255), (2,5,7), (255,255,255) ]
 
         def diff_info(client_ver):
             return {'infos': ['Client version {:d}.{:d}.{:d}'.format(*client_ver) +
@@ -57,6 +57,12 @@ class ServerTest(unittest.TestCase):
                              [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1},
                               ee(v)])
 
+    def test_flocra(self):
+        packet = construct_packet({'status': 0})
+        reply = send_packet(packet, self.s)
+        print("reply: ", reply)
+
+    @unittest.skip("flocra devel")            
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
         reply = send_packet(packet, self.s)
@@ -64,9 +70,9 @@ class ServerTest(unittest.TestCase):
                          [reply_pkt, 1, 0, version_full,
                           {},
                           {'errors': ['no commands present or incorrectly formatted request']}])
-                         
 
-    
+        
+    @unittest.skip("flocra devel")
     def test_bus(self):
         loops = 1000000
         packet = construct_packet({'test_bus':loops}, self.packet_idx)
@@ -79,14 +85,17 @@ class ServerTest(unittest.TestCase):
         self.assertAlmostEqual(read_t/1e3, 141.9 * loops_norm, delta = 2 * loops_norm) # 1 read takes ~141.9 ns on average
         self.assertAlmostEqual(write_t/1e3, 157.9 * loops_norm, delta = 2 * loops_norm) # 1 write takes ~157.9 ns on average
 
+    @unittest.skip("flocra devel")        
     def test_io(self):
         packet = construct_packet({'test_net':10}, self.packet_idx)
 
+    @unittest.skip("flocra devel")        
     def test_fpga_clk(self):
         packet = construct_packet({'fpga_clk': [0xdf0d, 0x03f03f30, 0x00100700]})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply, [reply_pkt, 1, 0, version_full, {'fpga_clk': 0}, {}])
 
+    @unittest.skip("flocra devel")        
     def test_fpga_clk_partial(self):
         packet = construct_packet({'fpga_clk': [0xdf0d,  0x03f03f30]})
         reply = send_packet(packet, self.s)
@@ -96,6 +105,7 @@ class ServerTest(unittest.TestCase):
                           {'errors': ["you only provided some FPGA clock control words; check you're providing all 3"]}]
         )
 
+    @unittest.skip("flocra devel")        
     def test_several_okay(self):
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10,
@@ -119,6 +129,7 @@ class ServerTest(unittest.TestCase):
                               'gradient mem data bytes copied: 32768']}]
         )
 
+    @unittest.skip("flocra devel")        
     def test_several_some_bad(self):
         # first, send a normal packet to ensure everything's in a known state
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
@@ -155,7 +166,7 @@ class ServerTest(unittest.TestCase):
                                       'acquisition retry limit outside the range [1000, 10,000,000]; check your settings'
                                       ]}
                           ])
-
+    @unittest.skip("flocra devel")
     def test_grad_adc(self):
         if grad_board != "gpa-fhdo":
             return
@@ -179,7 +190,8 @@ class ServerTest(unittest.TestCase):
 
         self.assertEqual(expected, readback)
 
-    def test_state(self):        
+    @unittest.skip("flocra devel")        
+    def test_state(self):
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
         true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
         tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
@@ -202,35 +214,57 @@ class ServerTest(unittest.TestCase):
                               'TX sample duration [CHECK]: 0.070000 us',
                               'RX sample duration [CHECK]: 2.034505 us',
                               'gradient sample duration (*not* DAC sampling rate): 2.149000 us',
-                              'gradient SPI transmission duration: 5.558000 us']}])
+                              'gradient SPI transmission duration: 5.558000 us']}])        
+
+    def test_leds(self):
+        # This test is mainly for the simulator, but will alter hardware LEDs too
+        packet = construct_packet({'direct': 0x0f00a500}) # leds: a5
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'direct': 0}, {}])
+
+        packet = construct_packet({'direct': 0x0f005a00}) # leds: 5a
+        reply = send_packet(packet, self.s)        
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'direct': 0}, {}])
+
+        # kill some time for the LEDs to change in simulation
+        packet = construct_packet({'status': 0})
+        for k in range(2):
+            reply = send_packet(packet, self.s)
         
-    def test_gradient_mem(self):
-        grad_mem_bytes = 4 * 8192
+    def test_flo_mem(self):
+        flo_mem_bytes = 4 * 65536 # full memory
+        # flo_mem_bytes = 4 * 2 # several writes for testing
 
         # everything should be fine
-        raw_data = bytearray(grad_mem_bytes)
-        for m in range(grad_mem_bytes):
+        raw_data = bytearray(flo_mem_bytes)
+        for m in range(flo_mem_bytes):
             raw_data[m] = m & 0xff
-        packet = construct_packet({'grad_mem' : raw_data})
+        packet = construct_packet({'flo_mem' : raw_data})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'grad_mem': 0},
-                          {'infos': ['gradient mem data bytes copied: {:d}'.format(grad_mem_bytes)] }
+                          {'flo_mem': 0},
+                          {'infos': ['flo mem data bytes copied: {:d}'.format(flo_mem_bytes)] }
                           ])
 
-        # a bit too much data
-        raw_data = bytearray(grad_mem_bytes + 1)
-        for m in range(grad_mem_bytes):
-            raw_data[m] = m & 0xff
-        packet = construct_packet({'grad_mem' : raw_data})
-        reply = send_packet(packet, self.s)
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full,
-                          {'grad_mem': -1},
-                          {'errors': ['too much grad mem data: {:d} bytes > {:d}'.format(grad_mem_bytes + 1, grad_mem_bytes)] }
-                          ])        
+        if False:
+            # a bit too much data
+            raw_data = bytearray(flo_mem_bytes + 1)
+            for m in range(flo_mem_bytes):
+                raw_data[m] = m & 0xff
+            packet = construct_packet({'flo_mem' : raw_data})
+            reply = send_packet(packet, self.s)
+            self.assertEqual(reply,
+                             [reply_pkt, 1, 0, version_full,
+                              {'flo_mem': -1},
+                              {'errors': ['too much flo mem data: {:d} bytes > {:d}'.format(flo_mem_bytes + 1, flo_mem_bytes)] }
+                              ])
 
+    @unittest.skip("flocra devel")        
     def test_acquire_simple(self):
         # For comprehensive tests, see test_loopback.py
         samples = 10
@@ -259,8 +293,8 @@ class ServerTest(unittest.TestCase):
                          [reply, 1, 0, version_full, {'configure_hw': 3}, {}]
         )
 
-    @unittest.skip("comment this line out to shut down the server after testing")
-    def test_zzz_exit(self): # last in alphabetical order
+    # @unittest.skip("comment this line out to shut down the server after testing")
+    def test_exit(self): # last in alphabetical order
         packet = construct_packet( {}, 0, command=close_server_pkt)
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
