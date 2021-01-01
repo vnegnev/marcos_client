@@ -156,10 +156,8 @@ class ServerTest(unittest.TestCase):
                                       ]}
                           ])
 
+    @unittest.skipUnless(grad_board == "gpa-fhdo", "requires GPA-FHDO board")
     def test_grad_adc(self):
-        if grad_board != "gpa-fhdo":
-            return
-
         # set up SPI to deliberately be too fast for the ADC -- latest server should automatically compensate
         send_packet(construct_packet({'grad_div': (200, 5), 'grad_ser': 2}), self.s)
 
