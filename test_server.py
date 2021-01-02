@@ -58,7 +58,7 @@ class ServerTest(unittest.TestCase):
                               ee(v)])
 
     def test_flocra(self):
-        packet = construct_packet({'status': 0})
+        packet = construct_packet({'regstatus': 0})
         reply = send_packet(packet, self.s)
         print("reply: ", reply)
 
@@ -218,11 +218,18 @@ class ServerTest(unittest.TestCase):
 
     def test_leds(self):
         # This test is mainly for the simulator, but will alter hardware LEDs too
+        for k in range(256):
+            packet = construct_packet({'direct': 0x0f000000 + int((k & 0xff) << 8)})
+            reply = send_packet(packet, self.s)
+            self.assertEqual(reply,
+                             [reply_pkt, 1, 0, version_full,
+                              {'direct': 0}, {}])
+
         packet = construct_packet({'direct': 0x0f00a500}) # leds: a5
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'direct': 0}, {}])
+                          {'direct': 0}, {}])            
 
         packet = construct_packet({'direct': 0x0f005a00}) # leds: 5a
         reply = send_packet(packet, self.s)        
@@ -231,7 +238,7 @@ class ServerTest(unittest.TestCase):
                           {'direct': 0}, {}])
 
         # kill some time for the LEDs to change in simulation
-        packet = construct_packet({'status': 0})
+        packet = construct_packet({'regstatus': 0})
         for k in range(2):
             reply = send_packet(packet, self.s)
         
@@ -251,18 +258,17 @@ class ServerTest(unittest.TestCase):
                           {'infos': ['flo mem data bytes copied: {:d}'.format(flo_mem_bytes)] }
                           ])
 
-        if False:
-            # a bit too much data
-            raw_data = bytearray(flo_mem_bytes + 1)
-            for m in range(flo_mem_bytes):
-                raw_data[m] = m & 0xff
-            packet = construct_packet({'flo_mem' : raw_data})
-            reply = send_packet(packet, self.s)
-            self.assertEqual(reply,
-                             [reply_pkt, 1, 0, version_full,
-                              {'flo_mem': -1},
-                              {'errors': ['too much flo mem data: {:d} bytes > {:d}'.format(flo_mem_bytes + 1, flo_mem_bytes)] }
-                              ])
+        # a bit too much data
+        raw_data = bytearray(flo_mem_bytes + 1)
+        for m in range(flo_mem_bytes):
+            raw_data[m] = m & 0xff
+        packet = construct_packet({'flo_mem' : raw_data})
+        reply = send_packet(packet, self.s)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full,
+                          {'flo_mem': -1},
+                          {'errors': ['too much flo mem data: {:d} bytes > {:d} -- streaming not yet implemented'.format(flo_mem_bytes + 1, flo_mem_bytes)] }
+                          ])
 
     @unittest.skip("flocra devel")        
     def test_acquire_simple(self):
