@@ -4,7 +4,7 @@ import msgpack, warnings
 
 version_major = 1
 version_minor = 0
-version_debug = 1
+version_debug = 2
 version_full = (version_major << 16) | (version_minor << 8) | version_debug
 
 request_pkt = 0

@@ -57,10 +57,12 @@ class ServerTest(unittest.TestCase):
                              [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1},
                               ee(v)])
 
-    def test_flocra(self):
+    def test_idle(self):
+        """ Make sure the server state is idle, all the RX and TX buffers are empty, etc."""
         packet = construct_packet({'regstatus': 0})
         reply = send_packet(packet, self.s)
-        print("reply: ", reply)
+        self.assertEqual(reply,
+                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, 0, 0, 0, 0, 0xffffff, 0]}, {}])
 
     @unittest.skip("flocra devel")            
     def test_bad_packet(self):
@@ -71,19 +73,29 @@ class ServerTest(unittest.TestCase):
                           {},
                           {'errors': ['no commands present or incorrectly formatted request']}])
 
-        
-    @unittest.skip("flocra devel")
     def test_bus(self):
-        loops = 1000000
+        real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
+        if real == "hardware":
+            deltas = (0.2, 2, 2)
+            times = (1.5, 131.0, 158.5) # numerical operation, bus read, bus write on hardware
+            loops = 1000000
+        elif real == "simulation":
+            deltas = (0.1, 5000, 3500)
+            times = (0.05, 10430, 5000)
+            loops = 1000
+        elif real == "software":
+            deltas = (3, 5, 5)
+            times = (5, 7, 7)
+            loops = 10000000
+            
         packet = construct_packet({'test_bus':loops}, self.packet_idx)
         reply = send_packet(packet, self.s)
         null_t, read_t, write_t = reply[4]['test_bus']
 
-        # print("{:d}, {:d}, {:d}".format(null_t, read_t, write_t))
-        self.assertAlmostEqual(null_t, 1, delta=1) # 1 million numerical operations take ~1 us (might be getting optimised out)
         loops_norm = loops/1e6
-        self.assertAlmostEqual(read_t/1e3, 141.9 * loops_norm, delta = 2 * loops_norm) # 1 read takes ~141.9 ns on average
-        self.assertAlmostEqual(write_t/1e3, 157.9 * loops_norm, delta = 2 * loops_norm) # 1 write takes ~157.9 ns on average
+        self.assertAlmostEqual(null_t/1e3, times[0] * loops_norm, delta = deltas[0] * loops_norm) # 1 flop takes ~1.5 ns on average
+        self.assertAlmostEqual(read_t/1e3, times[1] * loops_norm, delta = deltas[1] * loops_norm) # 1 read takes ~141.9 ns on average
+        self.assertAlmostEqual(write_t/1e3, times[2] * loops_norm, delta = deltas[2] * loops_norm) # 1 write takes ~157.9 ns on average
 
     @unittest.skip("flocra devel")        
     def test_io(self):
@@ -231,7 +243,7 @@ class ServerTest(unittest.TestCase):
                          [reply_pkt, 1, 0, version_full,
                           {'direct': 0}, {}])            
 
-        packet = construct_packet({'direct': 0x0f005a00}) # leds: 5a
+        packet = construct_packet({'direct': 0x0f002400}) # leds: 24
         reply = send_packet(packet, self.s)        
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
@@ -299,7 +311,7 @@ class ServerTest(unittest.TestCase):
                          [reply, 1, 0, version_full, {'configure_hw': 3}, {}]
         )
 
-    # @unittest.skip("comment this line out to shut down the server after testing")
+    @unittest.skip("comment this line out to shut down the server after testing")
     def test_exit(self): # last in alphabetical order
         packet = construct_packet( {}, 0, command=close_server_pkt)
         reply = send_packet(packet, self.s)
