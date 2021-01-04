@@ -93,9 +93,12 @@ class ServerTest(unittest.TestCase):
         null_t, read_t, write_t = reply[4]['test_bus']
 
         loops_norm = loops/1e6
-        self.assertAlmostEqual(null_t/1e3, times[0] * loops_norm, delta = deltas[0] * loops_norm) # 1 flop takes ~1.5 ns on average
-        self.assertAlmostEqual(read_t/1e3, times[1] * loops_norm, delta = deltas[1] * loops_norm) # 1 read takes ~141.9 ns on average
-        self.assertAlmostEqual(write_t/1e3, times[2] * loops_norm, delta = deltas[2] * loops_norm) # 1 write takes ~157.9 ns on average
+        if real == "hardware":
+            self.assertAlmostEqual(null_t/1e3, times[0] * loops_norm, delta = deltas[0] * loops_norm) # 1 flop takes ~1.5 ns on average
+            self.assertAlmostEqual(read_t/1e3, times[1] * loops_norm, delta = deltas[1] * loops_norm) # 1 read takes ~141.9 ns on average
+            self.assertAlmostEqual(write_t/1e3, times[2] * loops_norm, delta = deltas[2] * loops_norm) # 1 write takes ~157.9 ns on average
+        else:
+            print("\nnull_t, read_t, write_t: {:f}, {:f}, {:f} us / cycle".format(null_t/loops, read_t/loops, write_t/loops))
 
     @unittest.skip("flocra devel")        
     def test_io(self):
