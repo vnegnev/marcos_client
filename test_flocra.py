@@ -357,8 +357,16 @@ def long_loopback():
     lo_freq3 = 1.5
     lo_amp = 100 # percent
 
-    # These settings lead to memory-buffer-low events
+    # These settings lead to a fairly normal sequence
     if True:
+        cic0_decimation = 50
+        cic1_decimation = 94
+        extra_time = 20
+        sine_ts = 5
+        max_addr = 40000
+    
+    # These settings lead to memory-buffer-low events
+    if False:
         cic0_decimation = 50
         cic1_decimation = 94
         extra_time = 20
