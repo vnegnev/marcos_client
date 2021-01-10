@@ -9,51 +9,11 @@ import socket, time
 from local_config import ip_address, port, grad_board, fpga_clk_freq_MHz
 from server_comms import *
 
+from flomachine import *
+import flocompile as fc
+
 import pdb
 st = pdb.set_trace
-
-IFINISH = 0x1
-IWAIT = 0x2
-ITRIG = 0x3
-ITRIGFOREVER=0x4
-IDATA = 0x80
-
-GRAD_CTRL = 0
-GRAD_LSB = 1
-GRAD_MSB = 2
-RX0_CTRL = 3
-RX1_CTRL = 4
-TX0_I = 5
-TX0_Q = 6
-TX1_I = 7
-TX1_Q = 8
-DDS0_PHASE_LSB = 9
-DDS0_PHASE_MSB = 10
-DDS1_PHASE_LSB = 11
-DDS1_PHASE_MSB = 12
-DDS2_PHASE_LSB = 13
-DDS2_PHASE_MSB = 14
-GATES_LEDS = 15
-
-STATE_IDLE = 0
-STATE_PREPARE = 1
-STATE_RUN = 2
-STATE_COUNTDOWN = 3
-STATE_TRIG = 4
-STATE_TRIG_FOREVER = 5
-STATE_HALT = 8
-
-def insta(instr, data):
-    """ Instruction A: FSM control """
-    assert instr in [IFINISH, IWAIT, ITRIG, ITRIGFOREVER], "Unknown instruction"
-    return (instr << 24) | (data & 0xffffff)
-    
-def instb(tgt, delay, data):
-    """ Instruction B: timed buffered data """
-    assert tgt <= 24, "Unknown target buffer"
-    assert 0 <= delay <= 255, "Delay out of range"
-    assert (data & 0xffff) == (data & 0xffffffff), "Data out of range"
-    return (IDATA << 24) | ( (tgt & 0x7f) << 24 ) | ( (delay & 0xff) << 16 ) | (data & 0xffff)
 
 def get_exec_state(socket, display=True):
     reply, status = command({'regstatus': 0}, socket, print_infos=True)
@@ -130,6 +90,108 @@ def leds():
     raw_data[addr] = insta(IFINISH, 0); addr += 1
     raw_data = raw_data[:addr] # truncate
     return raw_data
+
+def flocompile_test():
+
+    lc = fc.csv2bin("/tmp/flocra_short.csv")
+    lc.append(insta(IFINISH, 0))
+    raw_data = np.array(lc, dtype=np.uint32)
+    print(raw_data.size)
+    return raw_data
+
+def example_tr_loop():
+    lo_freq0 = 5 # MHz
+    lo_freq1 = 6 # MHz
+    lo_amp = 100 # percent
+    raw_data = np.zeros(1000000, dtype=np.uint32)
+    addr = 0
+
+    cic0_decimation = 100
+    cic1_decimation = 200
+    dds_demod_ch = 3
+
+    tr_loops = 2
+
+    # Initially, turn on LO
+    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in flocra
+    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in flocra    
+    assert dds0_phase_step < 2**31, "DDS frequency outside of valid range"
+    assert dds1_phase_step < 2**31, "DDS frequency outside of valid range"
+
+    # zero the phase increment initially and reset the phase
+    raw_data[addr] = instb(DDS0_PHASE_LSB, 3, 0); addr += 1
+    raw_data[addr] = instb(DDS0_PHASE_MSB, 2, 0x8000); addr += 1    
+    raw_data[addr] = instb(DDS1_PHASE_LSB, 1, 0); addr += 1    
+    raw_data[addr] = instb(DDS1_PHASE_MSB, 0, 0x8000); addr += 1
+
+    # set the phase increment, start phase going
+    raw_data[addr] = instb(DDS0_PHASE_LSB, 3, dds0_phase_step & 0xffff); addr += 1
+    raw_data[addr] = instb(DDS0_PHASE_MSB, 2, dds0_phase_step >> 16); addr += 1
+    raw_data[addr] = instb(DDS1_PHASE_LSB, 1, dds1_phase_step & 0xffff); addr += 1
+    raw_data[addr] = instb(DDS1_PHASE_MSB, 0, dds1_phase_step >> 16); addr += 1
+
+    # allow the new phase to propagate through the chain before setting nonzero I/Q values
+    raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
+
+    # configure RX settings: both channels to use DDS source 0
+    # reset CICs
+    raw_data[addr] = instb(RX0_CTRL, 1, 0x0000); addr += 1
+    raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
+    # take them out of reset later
+    raw_data[addr] = instb(RX0_CTRL, 40, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = instb(RX1_CTRL, 39, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    # briefly signal that there's a new rate
+    raw_data[addr] = instb(RX0_CTRL, 40, 0xc000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = instb(RX1_CTRL, 40, 0xc000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    # end the new rate flag (the output buffers are not empty so no offset time is needed)
+    raw_data[addr] = instb(RX0_CTRL, 0, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = instb(RX1_CTRL, 0, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+    
+    # bring them back into reset a bit later, to prepare for future acquisitions
+    raw_data[addr] = instb(RX0_CTRL, 40, 0x0000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = instb(RX1_CTRL, 40, 0x0000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+
+    for k in range(tr_loops):
+
+        ## Initial TX, hard pulse
+        wait = 1.6276 # 1.6276us will lead to exactly 200 cycles
+
+        initial_block_delay = 4
+        
+        # initial delay of 100 cycles, taking into account the next block
+        raw_data[addr] = insta(IWAIT, 100 - initial_block_delay - 5); addr += 1
+        
+        addr_tx_start = addr
+        raw_data[addr] = instb(GATES_LEDS, initial_block_delay + 1, 0x1); addr += 1 # turn on TX gate
+        raw_data[addr] = instb(TX0_I, initial_block_delay - 1, 0xc000); addr += 1
+        raw_data[addr] = instb(TX0_Q, initial_block_delay - 2, 0x3fff); addr += 1
+        raw_data[addr] = instb(TX1_I, initial_block_delay - 3, 0xc000); addr += 1
+        raw_data[addr] = instb(TX1_Q, initial_block_delay - 4, 0x3fff); addr += 1
+
+        # take into account the time offset due to internal instructions and pre/post-wait instruction delays
+        # Written assuming the TX and TX gate outputs should be perfectly in sync - in reality a delay is probably wise
+        initial_block_delay = 4
+        raw_data[addr] = insta(IWAIT, int(np.round(wait * fpga_clk_freq_MHz)) + 1 - initial_block_delay - addr + addr_tx_start); addr += 1
+        raw_data[addr] = instb(GATES_LEDS, initial_block_delay + 1, 0x0); addr += 1; # turn off TX gate
+        raw_data[addr] = instb(TX0_I, initial_block_delay - 1, 0x0); addr += 1
+        raw_data[addr] = instb(TX0_Q, initial_block_delay - 2, 0x0); addr += 1
+        raw_data[addr] = instb(TX1_I, initial_block_delay - 3, 0x0); addr += 1
+        raw_data[addr] = instb(TX1_Q, initial_block_delay - 4, 0x0); addr += 1
+        addr_tx_end = addr
+
+        # Wait then acquire some data, wait some more, stop acquisition
+        raw_data[addr] = insta(IWAIT, 100 - 4 - addr + addr_tx_end); addr += 1 # wait 100 cycles
+        raw_data[addr] = instb(RX0_CTRL, 1, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
+        raw_data[addr] = instb(RX1_CTRL, 0, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+        raw_data[addr] = insta(IWAIT, 500 - 5); addr += 1 # wait 500 cycles
+        raw_data[addr] = instb(RX0_CTRL, 1, 0x0000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
+        raw_data[addr] = instb(RX1_CTRL, 0, 0x0000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+
+    # Go idle
+    raw_data[addr] = insta(IFINISH, 0); addr += 1
+    raw_data = raw_data[:addr] # truncate
+    print(addr)
+    return raw_data    
 
 def tx_short():
     lo_freq0 = 5 # MHz
@@ -352,18 +414,18 @@ def loopback():
 
 def long_loopback():
     lo_freq0 = 4 # MHz
-    lo_freq1 = 4
+    lo_freq1 = 4.01
     lo_freq2 = 1.5
-    lo_freq3 = 1.5
+    lo_freq3 = 1.51
     lo_amp = 100 # percent
 
     # These settings lead to a fairly normal sequence
     if True:
-        cic0_decimation = 50
-        cic1_decimation = 94
+        cic0_decimation = 1000
+        cic1_decimation = 50
         extra_time = 20
-        sine_ts = 5
-        max_addr = 40000
+        sine_ts = 2000
+        max_addr = 400000
     
     # These settings lead to memory-buffer-low events
     if False:
@@ -381,7 +443,7 @@ def long_loopback():
         sine_ts = 10
         max_addr = 500000
     
-    dds_demod_ch = 3
+    dds_demod_ch = 1
     raw_data = np.zeros(max_addr, dtype=np.uint32) # massive sequence
     addr = 0
 
@@ -496,17 +558,41 @@ if __name__ == "__main__":
     if False:
         data = long_loopback()
         st()
-    
+        
     if True:
+        # clear mem
+        
+        # res = run_streaming_test(example_tr_loop())
+        res = run_streaming_test(flocompile_test())
+
+        rxd = res[4]['run_seq']
+        # offsets = 1e8
+        offsets = 0
+        rx0_i = np.array(rxd['rx0_i'], dtype=np.int32)
+        rx0_q = np.array(rxd['rx0_q'], dtype=np.int32)+offsets
+        rx1_i = np.array(rxd['rx1_i'], dtype=np.int32)+2*offsets
+        rx1_q = np.array(rxd['rx1_q'], dtype=np.int32)+3*offsets
+        plt.plot(rx0_i)
+        plt.plot(rx0_q)
+        plt.plot(rx1_i)
+        plt.plot(rx1_q)
+
+        plt.legend(['rx0_i', 'rx0_q', 'rx1_i', 'rx1_q'])
+
+        plt.show()
+        
+    if False:
         # clear mem
         
         res = run_streaming_test(long_loopback())
 
         rxd = res[4]['run_seq']
+        # offsets = 1e8
+        offsets = 0
         rx0_i = np.array(rxd['rx0_i'], dtype=np.int32)
-        rx0_q = np.array(rxd['rx0_q'], dtype=np.int32)+1e8
-        rx1_i = np.array(rxd['rx1_i'], dtype=np.int32)+2e8
-        rx1_q = np.array(rxd['rx1_q'], dtype=np.int32)+3e8    
+        rx0_q = np.array(rxd['rx0_q'], dtype=np.int32)+offsets
+        rx1_i = np.array(rxd['rx1_i'], dtype=np.int32)+2*offsets
+        rx1_q = np.array(rxd['rx1_q'], dtype=np.int32)+3*offsets
         plt.plot(rx0_i)
         plt.plot(rx0_q)
         plt.plot(rx1_i)
