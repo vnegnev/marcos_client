@@ -70,7 +70,7 @@ def csv2bin(path, quick_start=True, min_grad_clocks=200,
     # Input: CSV column, starting from 0 for tx0 i and ending with 21 for leds
     # Output: corresponding buffer index or indices to change
     
-    data = np.loadtxt(path, skiprows=1, delimiter=',').astype(np.uint32)
+    data = np.loadtxt(path, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
     with open(path, 'r') as csvf:
         cols = csvf.readline().strip().split(',')[1:]
 
@@ -93,7 +93,8 @@ def csv2bin(path, quick_start=True, min_grad_clocks=200,
     # latencies = np.array([0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1])
 
     if quick_start:
-        # data[1:, 0] = data[1:, 0] - data[1, 0] + latencies.max() # remove dead time in the beginning taken up by simulated memory writes
+        # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from simulation
+        # data[1:, 0] = data[1:, 0] - data[1, 0] + latencies.max() 
         data[1:, 0] = data[1:, 0] - data[1, 0] + 10
 
     # Boolean: compare data offset by one row in time

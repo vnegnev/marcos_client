@@ -93,7 +93,7 @@ def leds():
 
 def flocompile_test():
 
-    lc = fc.csv2bin("/tmp/flocra_short.csv")
+    lc = fc.csv2bin("/tmp/flo_test1.csv")
     lc.append(insta(IFINISH, 0))
     raw_data = np.array(lc, dtype=np.uint32)
     print(raw_data.size)
@@ -562,8 +562,8 @@ if __name__ == "__main__":
     if True:
         # clear mem
         
-        # res = run_streaming_test(example_tr_loop())
-        res = run_streaming_test(flocompile_test())
+        res = run_streaming_test(example_tr_loop())
+        # res = run_streaming_test(flocompile_test())
 
         rxd = res[4]['run_seq']
         # offsets = 1e8
