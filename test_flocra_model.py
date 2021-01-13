@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
 #
+# Integrated test of the flocra server, HDL and compiler.
+#
+# Script compiles and runs the flocra simulation (server + HDL model)
+# and sends it various binaries generated using the flocra client
+# compiler, then compares the simulated hardware output against the
+# expected output.
+# 
 # To run a single test, use e.g.:
 # python -m unittest test_flocompile.CsvTest.test0
 
@@ -16,7 +23,42 @@ st = pdb.set_trace
 
 ip_address = "localhost"
 port = 11111
-flocra_path = "../flocra"
+flocra_path = os.path.join("..", "flocra")
+flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
+
+def compare_csvs(fname, sock, proc,
+                 initial_bufs=np.zeros(16, dtype=np.uint16),
+                 latencies=np.zeros(16, dtype=np.uint32)
+                 ):
+
+    if np.any(initial_bufs != np.zeros(16, dtype=np.uint16)):
+        print("This shouldn't happen! Is this a bug in Python or unittest?")
+        print("initial_bufs: ", initial_bufs)
+        initial_bufs = np.zeros(16, dtype=np.uint16)
+
+    lc = fc.csv2bin(os.path.join("csvs", fname + ".csv"),
+                    quick_start=False, min_grad_clocks=200,
+                    initial_bufs=initial_bufs,
+                    latencies=latencies)
+
+    lc.append(fc.insta(fc.IFINISH, 0))
+    data = np.array(lc, dtype=np.uint32)
+
+    # run simulation
+    rx_data, msgs = sc.command({'run_seq': data.tobytes()} , sock)
+
+    # halt simulation
+    sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), sock)
+    sock.close()
+    proc.wait(1) # wait a short time for simulator to close
+
+    # compare resultant CSV with the reference
+    with open(os.path.join("csvs", fname + "_ref.csv"), "r") as ref:
+        refl = ref.read().splitlines()
+    with open(flocra_sim_csv, "r") as sim:
+        siml = sim.read().splitlines()
+
+    return refl, siml
 
 class CsvTest(unittest.TestCase):
 
@@ -29,28 +71,66 @@ class CsvTest(unittest.TestCase):
     
     def setUp(self):
         # start simulation
-        os.system(os.path.join(flocra_path, "build", "flocra_sim") + " csv /tmp/flocra_sim.csv &")
+        self.p = subprocess.Popen([os.path.join(flocra_path, "build", "flocra_sim"), "csv", flocra_sim_csv],
+                                  stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.STDOUT)
+        # self.p = subprocess.Popen([os.path.join(flocra_path, "build", "flocra_sim"), "fst", "/tmp/flocra_sim.fst"])
+
         # open socket
         time.sleep(0.05) # give flocra_sim time to start up
-        self.csvf = open("/tmp/flocra_sim.csv", 'r')
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((ip_address, port)) # only connect to local simulator
-        self.packet_idx = 0        
+        self.packet_idx = 0
 
     def tearDown(self):
-        # halt simulation
-        sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), self.s)
-        # close socket
+        # self.p.terminate() # if not already terminated
+        # self.p.kill() # if not already terminated
         self.s.close()
 
-    def test01(self):
-        """ Linear increase on one channel, in time and value"""
-        lc = fc.csv2bin("test_csvs/test01.csv")
-        lc.append(fc.insta(fc.IFINISH, 0))
-        data = np.array(lc, dtype=np.uint32)
-        rx_data, msgs = sc.command({'run_seq': data.tobytes()} , self.s)
+    def test_single(self):
+        """ Basic state change on a single buffer """
+        refl, siml = compare_csvs("test_single", self.s, self.p)
+        self.assertEqual(refl, siml)
 
-        st()
+    def test_four_par(self):
+        """ State change on four buffers in parallel """
+        refl, siml = compare_csvs("test_four_par", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_single_quick(self):
+        """ Quick successive state changes on a single buffer 1 cycle apart """
+        refl, siml = compare_csvs("test_single_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_two_quick(self):
+        """ Quick successive state changes on two buffers, 2 cycles apart """
+        refl, siml = compare_csvs("test_two_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_mult_quick(self):
+        """ Quick successive state changes on multiple buffers, 1 cycle apart """
+        refl, siml = compare_csvs("test_mult_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_many_quick(self):
+        """ Many quick successive state changes on multiple buffers, all 1 cycle apart """
+        refl, siml = compare_csvs("test_many_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    # @unittest.expectedFailure        
+    # def test06_nolat(self):
+    #     """ Simultaneous state change on RX and TX, unmatched latency """
+    #     refl, siml = compare_csvs("test06", self.s, self.p)
+    #     self.assertEqual(refl, siml)
+
+    # def test07_lat(self):
+    #     """ Simultaneous state change on RX and TX, matched latency """
+    #     mlat = np.zeros(16, dtype=np.uint16)
+    #     # mlat = np.ones(16, dtype=np.uint16)
+    #     mlat[5:9] = np.ones(4)
+    #     refl, siml = compare_csvs("test07", self.s, self.p,
+    #                               latencies=mlat)
+    #     self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
     unittest.main()
