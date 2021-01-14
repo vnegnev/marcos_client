@@ -53,7 +53,7 @@ def compare_csvs(fname, sock, proc,
     proc.wait(1) # wait a short time for simulator to close
 
     # compare resultant CSV with the reference
-    with open(os.path.join("csvs", fname + "_ref.csv"), "r") as ref:
+    with open(os.path.join("csvs", "ref_" + fname + ".csv"), "r") as ref:
         refl = ref.read().splitlines()
     with open(flocra_sim_csv, "r") as sim:
         siml = sim.read().splitlines()
@@ -74,6 +74,8 @@ class CsvTest(unittest.TestCase):
         self.p = subprocess.Popen([os.path.join(flocra_path, "build", "flocra_sim"), "csv", flocra_sim_csv],
                                   stdout=subprocess.DEVNULL,
                                   stderr=subprocess.STDOUT)
+
+        ## Uncomment to produce an FST dump for debugging with GTKWave, in the case of a particular misbehaving test
         # self.p = subprocess.Popen([os.path.join(flocra_path, "build", "flocra_sim"), "fst", "/tmp/flocra_sim.fst"])
 
         # open socket
@@ -87,35 +89,42 @@ class CsvTest(unittest.TestCase):
         # self.p.kill() # if not already terminated
         self.s.close()
 
-    def test_single(self):
-        """ Basic state change on a single buffer """
-        refl, siml = compare_csvs("test_single", self.s, self.p)
-        self.assertEqual(refl, siml)
+    ## Tests are approximately in order of complexity
 
-    def test_four_par(self):
-        """ State change on four buffers in parallel """
-        refl, siml = compare_csvs("test_four_par", self.s, self.p)
-        self.assertEqual(refl, siml)
+    # def test_single(self):
+    #     """ Basic state change on a single buffer """
+    #     refl, siml = compare_csvs("test_single", self.s, self.p)
+    #     self.assertEqual(refl, siml)
 
-    def test_single_quick(self):
-        """ Quick successive state changes on a single buffer 1 cycle apart """
-        refl, siml = compare_csvs("test_single_quick", self.s, self.p)
-        self.assertEqual(refl, siml)
+    # def test_four_par(self):
+    #     """ State change on four buffers in parallel """
+    #     refl, siml = compare_csvs("test_four_par", self.s, self.p)
+    #     self.assertEqual(refl, siml)
 
-    def test_two_quick(self):
-        """ Quick successive state changes on two buffers, 2 cycles apart """
-        refl, siml = compare_csvs("test_two_quick", self.s, self.p)
-        self.assertEqual(refl, siml)
+    # def test_single_quick(self):
+    #     """ Quick successive state changes on a single buffer 1 cycle apart """
+    #     refl, siml = compare_csvs("test_single_quick", self.s, self.p)
+    #     self.assertEqual(refl, siml)
 
-    def test_mult_quick(self):
-        """ Quick successive state changes on multiple buffers, 1 cycle apart """
-        refl, siml = compare_csvs("test_mult_quick", self.s, self.p)
-        self.assertEqual(refl, siml)
+    # def test_two_quick(self):
+    #     """ Quick successive state changes on two buffers, 2 cycles apart """
+    #     refl, siml = compare_csvs("test_two_quick", self.s, self.p)
+    #     self.assertEqual(refl, siml)
 
-    def test_many_quick(self):
-        """ Many quick successive state changes on multiple buffers, all 1 cycle apart """
-        refl, siml = compare_csvs("test_many_quick", self.s, self.p)
-        self.assertEqual(refl, siml)
+    # def test_mult_quick(self):
+    #     """ Quick successive state changes on multiple buffers, 1 cycle apart """
+    #     refl, siml = compare_csvs("test_mult_quick", self.s, self.p)
+    #     self.assertEqual(refl, siml)
+
+    # def test_many_quick(self):
+    #     """ Many quick successive state changes on multiple buffers, all 1 cycle apart """
+    #     refl, siml = compare_csvs("test_many_quick", self.s, self.p)
+    #     self.assertEqual(refl, siml)
+
+    def test_stream_quick(self):
+        """ Bursts of state changes on multiple buffers, various numbers of cycles apart """
+        refl, siml = compare_csvs("test_stream_quick", self.s, self.p)
+        self.assertEqual(refl, siml)        
 
     # @unittest.expectedFailure        
     # def test06_nolat(self):
