@@ -8,7 +8,7 @@
 # expected output.
 # 
 # To run a single test, use e.g.:
-# python -m unittest test_flocompile.CsvTest.test0
+# python -m unittest test_flocompile.CsvTest.test_many_quick
 
 import sys, os, subprocess, warnings, socket, unittest, time
 import numpy as np
@@ -106,6 +106,11 @@ class CsvTest(unittest.TestCase):
     #     refl, siml = compare_csvs("test_single_quick", self.s, self.p)
     #     self.assertEqual(refl, siml)
 
+    def test_single_delays(self):
+        """ State changes on a single buffer with various delays in between"""
+        refl, siml = compare_csvs("test_single_delays", self.s, self.p)
+        self.assertEqual(refl, siml)    
+
     # def test_two_quick(self):
     #     """ Quick successive state changes on two buffers, 2 cycles apart """
     #     refl, siml = compare_csvs("test_two_quick", self.s, self.p)
@@ -121,10 +126,15 @@ class CsvTest(unittest.TestCase):
     #     refl, siml = compare_csvs("test_many_quick", self.s, self.p)
     #     self.assertEqual(refl, siml)
 
-    def test_stream_quick(self):
-        """ Bursts of state changes on multiple buffers, various numbers of cycles apart """
-        refl, siml = compare_csvs("test_stream_quick", self.s, self.p)
-        self.assertEqual(refl, siml)        
+    # def test_stream_quick(self):
+    #     """ Bursts of state changes on multiple buffers with uneven gaps for each individual buffer, each state change 1 cycle apart """
+    #     refl, siml = compare_csvs("test_stream_quick", self.s, self.p)
+    #     self.assertEqual(refl, siml)
+
+    # def test_uneven_times(self):
+    #     """ Bursts of state changes on multiple buffers with uneven gaps, each state change uneven numbers of cycles apart """
+    #     refl, siml = compare_csvs("test_uneven_times", self.s, self.p)
+    #     self.assertEqual(refl, siml)    
 
     # @unittest.expectedFailure        
     # def test06_nolat(self):

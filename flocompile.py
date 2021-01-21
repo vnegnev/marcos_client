@@ -195,6 +195,10 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     time_offsets = np.zeros(16, dtype=np.int32)
     last_instrs = 0
     # buf_empty_time = np.zeros(16, dtype=np.int32)
+    debug_print("changes:")
+    for k in changes:
+        debug_print(k)
+    
     for stepch in changes:
         b_instrs = stepch[1].size
         time = stepch[0] - last_time
@@ -204,31 +208,38 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
             # extra delay needed
             extra_delay = time - b_instrs - 3
             bdata.append(insta(IWAIT, extra_delay))
+            debug_print("wait ", extra_delay)
             last_instrs = b_instrs + 1
+            time -= extra_delay + b_instrs + 2 # reduce it by the amount taken by instructions
         else:
-            last_instrs = b_instrs   
+            last_instrs = b_instrs
 
-        time_offset = stepch[3]
+        this_time_offset = stepch[3]
         last_time_offsets = time_offsets
         # print("to", time_offset)
         # print("ltos:", last_time_offsets)
         time_offsets = time_offsets - time
         time_offsets[time_offsets < 0] = 0
         ltom = last_time_offsets.max()
+        debug_print("--- time: {:d}, lto: ".format(time), last_time_offsets[5:9])
         for m, (ind, dat) in enumerate(zip(stepch[1], stepch[2])):
-            execution_delay = b_instrs - m - 1
+            execution_delay = b_instrs - m - 1 #+ time - 2
+            time_delay = time - 1
             ltoi = last_time_offsets[ind]
-            if ltoi <= 1: # buffer empty for this instruction; need an appropriate delay
-                extra_delay = execution_delay + time_offset
+            if ltoi <= m: # buffer empty for this instruction; need an appropriate delay
+                # (check against m since with successive cycles, remaining buffers will empty out)
+                extra_delay = execution_delay + time_delay + this_time_offset
             else:
                 # buffer already not empty, only need extra offset if
                 # some buffers are closer to emptying than others
-                extra_delay = ltom - ltoi
+                extra_delay = ltom - ltoi + time_delay
             
             bdata.append(instb(ind, extra_delay, dat))
-            debug_print("lto {:d} bm={:d} instb i {:d} del {:d} dat {:d}".format(last_time_offsets[ind], b_instrs-m-1, ind, extra_delay, dat))
+            debug_print("ltoi {:d} ed={:d} instb i {:d} del {:d} dat {:d}".format(ltoi, execution_delay, ind, extra_delay, dat))
 
-            time_offsets[ind] = time_offset
+            time_offsets[ind] = this_time_offset
+
+    st()
     return bdata
                 
 if __name__ == "__main__":
