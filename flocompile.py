@@ -201,30 +201,30 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     
     for stepch in changes:
         b_instrs = stepch[1].size
-        time = stepch[0] - last_time
+        time = stepch[0] - last_time # cycles from previous event when all the changes of stepch must take place
         last_time = stepch[0]
 
+        last_instrs = b_instrs
+        time_eff = time        
         if time > b_instrs + 3:
             # extra delay needed
-            extra_delay = time - b_instrs - 3
-            bdata.append(insta(IWAIT, extra_delay))
-            debug_print("wait ", extra_delay)
+            wait_delay = time - b_instrs - 3
+            bdata.append(insta(IWAIT, wait_delay)) # 10 = debug!
+            debug_print("i wait ", wait_delay)
             last_instrs = b_instrs + 1
-            time -= extra_delay + b_instrs + 2 # reduce it by the amount taken by instructions
-        else:
-            last_instrs = b_instrs
+            time_eff = time - wait_delay + 1 # reduce it by the amount taken by delay instruction
+
+        # count down the times until each channel buffer will be empty
+        time_offsets = time_offsets - time_eff
+        time_offsets[time_offsets < 0] = 0            
 
         this_time_offset = stepch[3]
         last_time_offsets = time_offsets
-        # print("to", time_offset)
-        # print("ltos:", last_time_offsets)
-        time_offsets = time_offsets - time
-        time_offsets[time_offsets < 0] = 0
         ltom = last_time_offsets.max()
-        debug_print("--- time: {:d}, lto: ".format(time), last_time_offsets[5:9])
+        debug_print("--- time {:d}, time_eff {:d}, lto: ".format(time, time_eff), last_time_offsets[5:9])
         for m, (ind, dat) in enumerate(zip(stepch[1], stepch[2])):
             execution_delay = b_instrs - m - 1 #+ time - 2
-            time_delay = time - 1
+            time_delay = time_eff - 1
             ltoi = last_time_offsets[ind]
             if ltoi <= m: # buffer empty for this instruction; need an appropriate delay
                 # (check against m since with successive cycles, remaining buffers will empty out)
@@ -239,7 +239,6 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
 
             time_offsets[ind] = this_time_offset
 
-    st()
     return bdata
                 
 if __name__ == "__main__":

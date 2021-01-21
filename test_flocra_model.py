@@ -28,13 +28,9 @@ flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
 
 def compare_csvs(fname, sock, proc,
                  initial_bufs=np.zeros(16, dtype=np.uint16),
-                 latencies=np.zeros(16, dtype=np.uint32)
+                 latencies=np.zeros(16, dtype=np.uint32),
+                 diff_times=True
                  ):
-
-    if np.any(initial_bufs != np.zeros(16, dtype=np.uint16)):
-        print("This shouldn't happen! Is this a bug in Python or unittest?")
-        print("initial_bufs: ", initial_bufs)
-        initial_bufs = np.zeros(16, dtype=np.uint16)
 
     lc = fc.csv2bin(os.path.join("csvs", fname + ".csv"),
                     quick_start=False, min_grad_clocks=200,
@@ -53,12 +49,22 @@ def compare_csvs(fname, sock, proc,
     proc.wait(1) # wait a short time for simulator to close
 
     # compare resultant CSV with the reference
-    with open(os.path.join("csvs", "ref_" + fname + ".csv"), "r") as ref:
-        refl = ref.read().splitlines()
-    with open(flocra_sim_csv, "r") as sim:
-        siml = sim.read().splitlines()
+    ref_csv = os.path.join("csvs", "ref_" + fname + ".csv")
+    
+    if diff_times:
+        rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
+        sdata = np.loadtxt(flocra_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
 
-    return refl, siml
+        rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
+        sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
+
+        return rdata.tolist(), sdata.tolist()
+    else:
+        with open(refpath, "r") as ref:
+            refl = ref.read().splitlines()
+        with open(flocra_sim_csv, "r") as sim:
+            siml = sim.read().splitlines()
+        return refl, siml
 
 class CsvTest(unittest.TestCase):
 
@@ -109,7 +115,7 @@ class CsvTest(unittest.TestCase):
     def test_single_delays(self):
         """ State changes on a single buffer with various delays in between"""
         refl, siml = compare_csvs("test_single_delays", self.s, self.p)
-        self.assertEqual(refl, siml)    
+        self.assertEqual(refl, siml)
 
     # def test_two_quick(self):
     #     """ Quick successive state changes on two buffers, 2 cycles apart """
