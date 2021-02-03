@@ -97,35 +97,50 @@ class CsvTest(unittest.TestCase):
 
     ## Tests are approximately in order of complexity
 
-    # def test_single(self):
-    #     """ Basic state change on a single buffer """
-    #     refl, siml = compare_csvs("test_single", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_single(self):
+        """ Basic state change on a single buffer """
+        refl, siml = compare_csvs("test_single", self.s, self.p)
+        self.assertEqual(refl, siml)
 
-    # def test_four_par(self):
-    #     """ State change on four buffers in parallel """
-    #     refl, siml = compare_csvs("test_four_par", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_four_par(self):
+        """ State change on four buffers in parallel """
+        refl, siml = compare_csvs("test_four_par", self.s, self.p)
+        self.assertEqual(refl, siml)
 
-    # def test_single_quick(self):
-    #     """ Quick successive state changes on a single buffer 1 cycle apart """
-    #     refl, siml = compare_csvs("test_single_quick", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_single_quick(self):
+        """ Quick successive state changes on a single buffer 1 cycle apart """
+        refl, siml = compare_csvs("test_single_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
 
     def test_single_delays(self):
         """ State changes on a single buffer with various delays in between"""
         refl, siml = compare_csvs("test_single_delays", self.s, self.p)
         self.assertEqual(refl, siml)
 
-    # def test_two_quick(self):
-    #     """ Quick successive state changes on two buffers, 2 cycles apart """
-    #     refl, siml = compare_csvs("test_two_quick", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_two_quick(self):
+        """ Quick successive state changes on two buffers, one cycle apart """
+        refl, siml = compare_csvs("test_two_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
+    
+    def test_two_delays(self):
+        """ State changes on two buffers, various delays in between """
+        refl, siml = compare_csvs("test_two_delays", self.s, self.p)
+        self.assertEqual(refl, siml)
 
-    # def test_mult_quick(self):
-    #     """ Quick successive state changes on multiple buffers, 1 cycle apart """
-    #     refl, siml = compare_csvs("test_mult_quick", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_three_quick(self):
+        """ Quick successive state changes on two buffers, one cycle apart """
+        refl, siml = compare_csvs("test_three_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
+    
+    def test_three_delays(self):
+        """ Successive state changes on three buffers, two cycles apart """
+        refl, siml = compare_csvs("test_three_delays", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_mult_quick(self):
+        """ Quick successive state changes on multiple buffers, 1 cycle apart """
+        refl, siml = compare_csvs("test_mult_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
 
     # def test_many_quick(self):
     #     """ Many quick successive state changes on multiple buffers, all 1 cycle apart """

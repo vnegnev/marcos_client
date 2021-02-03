@@ -6,6 +6,7 @@
 
 from local_config import grad_board
 
+INOP = 0x0
 IFINISH = 0x1
 IWAIT = 0x2
 ITRIG = 0x3
@@ -39,7 +40,7 @@ STATE_HALT = 8
 
 def insta(instr, data):
     """ Instruction A: FSM control """
-    assert instr in [IFINISH, IWAIT, ITRIG, ITRIGFOREVER], "Unknown instruction"
+    assert instr in [INOP, IFINISH, IWAIT, ITRIG, ITRIGFOREVER], "Unknown instruction"
     return (instr << 24) | (data & 0xffffff)
     
 def instb(tgt, delay, data):

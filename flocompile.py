@@ -141,7 +141,7 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
         unique_times = []
         unique_changes = []
         change_masks = np.zeros(16, dtype=np.uint16)
-        changed = np.zeros(16, dtype=np.bool)
+        changed = np.zeros(16, dtype=bool)
 
         def close_timestep(time):
             ch_idces = np.where(changed)[0]
@@ -149,7 +149,7 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
             buf_time_offsets = 0
             unique_changes.append( [time, ch_idces, current_bufs[ch_idces], buf_time_offsets] )
             change_masks[:] = np.zeros(16, dtype=np.uint16)
-            changed[:] = np.zeros(16, dtype=np.bool)            
+            changed[:] = np.zeros(16, dtype=bool)            
         
         for time, buf, val, mask in changelist:
             if time != current_time:
@@ -177,11 +177,20 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     for ch, ch_prev in zip( reversed(changes[1:]), reversed(changes[:-1]) ):
         # does the current timestep need to output more data than can
         # fit into the time gap since the previous timestep?
-        timediff = ch[1].size - (ch[0] - ch_prev[0])
+        timestep = ch[0] - ch_prev[0]
+        timediff = ch[1].size - timestep
+        # if timestep < ch[1].size: # not enough time 
+            
         if timediff > 0:
             ch_prev[0] -= timediff # move prev. event into the past
-            # ch_prev[3][ch_prev[1]] = timediff # make prev. event's buffers output in the future
-            ch_prev[3] = timediff
+            ch_prev[3] = timediff # make prev. event's buffers output in its future
+
+    # convert to differential timesteps
+    last_time = 0
+    for ch in changes:
+        ch0 = ch[0]
+        ch[0] = ch0 - last_time
+        last_time = ch0
 
     # New interpretation of each element of changes:
     # [time when all instructions for this change will have completed,
@@ -190,55 +199,107 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     #  max time offset to apply when setting the buffers]
     
     # Write out instructions
+
+    ## WARNING: DEBUGGING
+    # changes = [
+    #     [20, np.array([5, 6]), np.array([1, 2], dtype=np.uint16), 1],
+    #     [2, np.array([5, 6]), np.array([3, 4], dtype=np.uint16), 0],
+    #     [1, np.array([5, 6]), np.array([5, 6], dtype=np.uint16), 0],
+    #     ]
+    
+    # changes = [
+    #     [20, np.array([5, 6]), np.array([1, 2], dtype=np.uint16), 1],
+    #     [2, np.array([5, 6]), np.array([3, 4], dtype=np.uint16), 0],
+    #     [1, np.array([5, 6]), np.array([5, 6], dtype=np.uint16), 0],
+    #     ]
+    
     last_time = 0
-    last_time_offsets = np.zeros(16, dtype=np.int32)
-    time_offsets = np.zeros(16, dtype=np.int32)
+    last_buf_time_left = np.zeros(16, dtype=np.int32)
+    buf_time_left = np.zeros(16, dtype=np.int32)
     last_instrs = 0
     # buf_empty_time = np.zeros(16, dtype=np.int32)
     debug_print("changes:")
     for k in changes:
         debug_print(k)
     
-    for stepch in changes:
-        b_instrs = stepch[1].size
-        time = stepch[0] - last_time # cycles from previous event when all the changes of stepch must take place
-        last_time = stepch[0]
+    for event in changes:
+        b_instrs = event[1].size
+        dtime = event[0]
 
         last_instrs = b_instrs
-        time_eff = time        
-        if time > b_instrs + 3:
-            # extra delay needed
-            wait_delay = time - b_instrs - 3
-            bdata.append(insta(IWAIT, wait_delay)) # 10 = debug!
+
+        # soak up any extra time which is in excess of what the instructions need to execute synchronously
+        excess_dtime = dtime - b_instrs
+        if excess_dtime > 2: # delay of 3 or more cycles needed
+            wait_delay = dtime - b_instrs - 3 # delay for the time instruction
+            bdata.append(insta(IWAIT, wait_delay))
             debug_print("i wait ", wait_delay)
-            last_instrs = b_instrs + 1
-            time_eff = time - wait_delay + 1 # reduce it by the amount taken by delay instruction
+        elif excess_dtime: # delay of 1 or 2 cycles
+            for k in range(dtime - b_instrs):
+                debug_print("i nop")
+                bdata.append(insta(INOP, 0))
+
+        # time left after delays from nops or waits
+        # dtime_eff could be increased later with a more advanced
+        # compiler, to make the buffers bear more of the internal
+        # delays
+        dtime_eff = b_instrs
 
         # count down the times until each channel buffer will be empty
-        time_offsets = time_offsets - time_eff
-        time_offsets[time_offsets < 0] = 0            
+        # buf_time_left = buf_time_left - excess_dtime - 1
+        buf_time_left = buf_time_left - dtime
+        buf_time_left[buf_time_left < 0] = 0
 
-        this_time_offset = stepch[3]
-        last_time_offsets = time_offsets
-        ltom = last_time_offsets.max()
-        debug_print("--- time {:d}, time_eff {:d}, lto: ".format(time, time_eff), last_time_offsets[5:9])
-        for m, (ind, dat) in enumerate(zip(stepch[1], stepch[2])):
-            execution_delay = b_instrs - m - 1 #+ time - 2
-            time_delay = time_eff - 1
-            ltoi = last_time_offsets[ind]
-            if ltoi <= m: # buffer empty for this instruction; need an appropriate delay
+        this_time_offset = event[3]
+        last_buf_time_left = buf_time_left
+        lbtm = last_buf_time_left.max()
+        debug_print("--- dtime {:d}, dtime_eff {:d}, lbt: ".format(dtime, dtime_eff), last_buf_time_left[5:9])
+        for m, (ind, dat) in enumerate(zip(event[1], event[2])):
+            execution_delay = last_instrs - m - 1 #+ time - 2
+            # time_delay = dtime_eff - 1
+            lbti = last_buf_time_left[ind]
+            buf_empty = lbti <= m # or <= m, need to check
+            if buf_empty: # buffer empty for this instruction; need an appropriate delay only for sync
                 # (check against m since with successive cycles, remaining buffers will empty out)
-                extra_delay = execution_delay + time_delay + this_time_offset
+                # extra_delay = execution_delay + this_time_offset + time_delay
+                # extra_delay = execution_delay + this_time_offset + dtime_eff
+                extra_delay = execution_delay + this_time_offset
+                # buf_time_left[ind] = this_time_offset + 1
+                buf_time_left[ind] = this_time_offset + dtime_eff
             else:
-                # buffer already not empty, only need extra offset if
+                # buffer already not empty on this cycle, only need extra offset if
                 # some buffers are closer to emptying than others
-                extra_delay = ltom - ltoi + time_delay
+                # extra_delay = lbtm - lbti + this_time_offset # + time_delay
+                extra_delay = this_time_offset - lbti + dtime_eff - 1
+                # extra_delay = 1
+                # buf_time_left[ind] += this_time_offset
+                buf_time_left[ind] += 1 + extra_delay
+
+            debug_print("bti={:d} lbti={:d} m={:d} empty={:d} edel={:d} instb i {:d} del {:d} dat {:d}".format(
+                buf_time_left[ind], lbti, m, buf_empty, execution_delay, ind, extra_delay, dat))                
+            if extra_delay < 0: st()
+            if True:
+                bdata.append(instb(ind, extra_delay, dat))
             
-            bdata.append(instb(ind, extra_delay, dat))
-            debug_print("ltoi {:d} ed={:d} instb i {:d} del {:d} dat {:d}".format(ltoi, execution_delay, ind, extra_delay, dat))
+            # st()
 
-            time_offsets[ind] = this_time_offset
+    if False: # DEBUG
+        # case 1
+        # bdata.append(instb(5, 2, 1))
+        # bdata.append(instb(6, 1, 2))
+        # bdata.append(instb(5, 0, 3))
+        # bdata.append(instb(5, 0, 4))
+        # bdata.append(instb(6, 0, 5))
 
+        # case 2
+        bdata.append(instb(5, 2, 1))
+        bdata.append(instb(6, 1, 2))
+        bdata.append(instb(5, 1, 3))
+        bdata.append(instb(5, 1, 4))
+        bdata.append(instb(6, 0, 5))
+    # bdata.append(instb(5, 2, 1))
+    # bdata.append(instb(5, 2, 2))
+    # bdata.append(instb(5, 1, 3))        
     return bdata
                 
 if __name__ == "__main__":
