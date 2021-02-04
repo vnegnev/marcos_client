@@ -156,7 +156,12 @@ class CsvTest(unittest.TestCase):
     def test_uneven_times(self):
         """ Bursts of state changes on multiple buffers with uneven gaps, each state change uneven numbers of cycles apart """
         refl, siml = compare_csvs("test_uneven_times", self.s, self.p)
-        self.assertEqual(refl, siml)    
+        self.assertEqual(refl, siml)
+
+    def test_uneven_sparse(self):
+        """ Bursts of state changes on multiple buffers with uneven gaps, each state change uneven numbers of cycles apart """
+        refl, siml = compare_csvs("test_uneven_sparse", self.s, self.p)
+        self.assertEqual(refl, siml)        
 
     # @unittest.expectedFailure        
     # def test06_nolat(self):
