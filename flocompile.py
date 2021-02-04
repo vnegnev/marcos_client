@@ -12,8 +12,8 @@ st = pdb.set_trace
 grad_data_bufs = (1, 2)
 
 def debug_print(*args, **kwargs):
-    pass
     # print(*args, **kwargs)
+    pass
 
 def col2buf(col_idx, value, gb=grad_board):
     """ Returns a tuple of (buffer indices), (values), (value masks) 
@@ -212,11 +212,13 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
 
         # soak up any extra time which is in excess of what the instructions need to execute synchronously
         excess_dtime = dtime - b_instrs
-        if excess_dtime > 2: # delay of 3 or more cycles needed
-            wait_delay = dtime - b_instrs - 3 # delay for the time instruction
-            bdata.append(insta(IWAIT, wait_delay))
-            debug_print("i wait ", wait_delay)
-        elif excess_dtime: # delay of 1 or 2 cycles
+        excess_dtime_tmp = excess_dtime
+        while excess_dtime_tmp > 2: # delay of 3 or more cycles needed
+            wait_time = min(excess_dtime_tmp, COUNTER_MAX + 3) # delay for the time instruction
+            bdata.append(insta(IWAIT, wait_time - 3))
+            excess_dtime_tmp -= wait_time
+            debug_print("i wait ", wait_time - 3)
+        if excess_dtime_tmp: # final delay of 1 or 2 cycles
             for k in range(dtime - b_instrs):
                 debug_print("i nop")
                 bdata.append(insta(INOP, 0))

@@ -38,9 +38,12 @@ STATE_TRIG = 4
 STATE_TRIG_FOREVER = 5
 STATE_HALT = 8
 
+COUNTER_MAX = 0xffffff
+
 def insta(instr, data):
     """ Instruction A: FSM control """
     assert instr in [INOP, IFINISH, IWAIT, ITRIG, ITRIGFOREVER], "Unknown instruction"
+    assert (data & COUNTER_MAX) == (data & 0xffffffff), "Data out of range"
     return (instr << 24) | (data & 0xffffff)
     
 def instb(tgt, delay, data):

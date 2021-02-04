@@ -20,11 +20,17 @@ import flocompile as fc
 
 import pdb
 st = pdb.set_trace
-
 ip_address = "localhost"
 port = 11111
-flocra_path = os.path.join("..", "flocra")
+
+# simulation configuration
+flocra_sim_path = os.path.join("..", "flocra")
 flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
+
+# Set to True to debug with GTKWave -- just do one test at a time!
+flocra_sim_fst_dump = False
+flocra_sim_fst = os.path.join("/tmp", "flocra_sim.fst")
+
 
 def compare_csvs(fname, sock, proc,
                  initial_bufs=np.zeros(16, dtype=np.uint16),
@@ -72,21 +78,25 @@ class CsvTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # TODO make this check for a file first
-        os.system("make -j4 -s -C " + os.path.join(flocra_path, "build"))
+        os.system("make -j4 -s -C " + os.path.join(flocra_sim_path, "build"))
         os.system("fallocate -l 516KiB /tmp/marcos_server_mem")
         os.system("killall flocra_sim") # in case other instances were started earlier
     
     def setUp(self):
         # start simulation
-        self.p = subprocess.Popen([os.path.join(flocra_path, "build", "flocra_sim"), "csv", flocra_sim_csv],
-                                  stdout=subprocess.DEVNULL,
-                                  stderr=subprocess.STDOUT)
+        if flocra_sim_fst_dump:
+            self.p = subprocess.Popen([os.path.join(flocra_sim_path, "build", "flocra_sim"), "both", flocra_sim_csv, flocra_sim_fst],
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.STDOUT)
+        else:
+            self.p = subprocess.Popen([os.path.join(flocra_sim_path, "build", "flocra_sim"), "csv", flocra_sim_csv],
+                                      stdout=subprocess.DEVNULL,
+                                      stderr=subprocess.STDOUT)
 
-        ## Uncomment to produce an FST dump for debugging with GTKWave, in the case of a particular misbehaving test
-        # self.p = subprocess.Popen([os.path.join(flocra_path, "build", "flocra_sim"), "fst", "/tmp/flocra_sim.fst"])
 
         # open socket
         time.sleep(0.05) # give flocra_sim time to start up
+        
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((ip_address, port)) # only connect to local simulator
         self.packet_idx = 0
@@ -95,6 +105,10 @@ class CsvTest(unittest.TestCase):
         # self.p.terminate() # if not already terminated
         # self.p.kill() # if not already terminated
         self.s.close()
+
+        if flocra_sim_fst_dump:
+            # open GTKWave
+            os.system("gtkwave " + flocra_sim_fst + " " + os.path.join(flocra_sim_path, "src", "flocra_sim.sav"))
 
     ## Tests are approximately in order of complexity
 
@@ -106,6 +120,14 @@ class CsvTest(unittest.TestCase):
     def test_four_par(self):
         """ State change on four buffers in parallel """
         refl, siml = compare_csvs("test_four_par", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_long_time(self):        
+        """ State change on four buffers in parallel """
+        max_orig = fc.COUNTER_MAX
+        fc.COUNTER_MAX = 0xfff # temporarily reduce max time used by compiler
+        refl, siml = compare_csvs("test_long_time", self.s, self.p)
+        fc.COUNTER_MAX = max_orig
         self.assertEqual(refl, siml)
 
     def test_single_quick(self):
@@ -161,22 +183,17 @@ class CsvTest(unittest.TestCase):
     def test_uneven_sparse(self):
         """ Bursts of state changes on multiple buffers with uneven gaps, each state change uneven numbers of cycles apart """
         refl, siml = compare_csvs("test_uneven_sparse", self.s, self.p)
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
 
-    # @unittest.expectedFailure        
-    # def test06_nolat(self):
-    #     """ Simultaneous state change on RX and TX, unmatched latency """
-    #     refl, siml = compare_csvs("test06", self.s, self.p)
-    #     self.assertEqual(refl, siml)
-
-    # def test07_lat(self):
-    #     """ Simultaneous state change on RX and TX, matched latency """
-    #     mlat = np.zeros(16, dtype=np.uint16)
-    #     # mlat = np.ones(16, dtype=np.uint16)
-    #     mlat[5:9] = np.ones(4)
-    #     refl, siml = compare_csvs("test07", self.s, self.p,
-    #                               latencies=mlat)
-    #     self.assertEqual(refl, siml)
+    def test_cfg(self):
+        """ Configuration and LED bits/words """
+        refl, siml = compare_csvs("test_cfg", self.s, self.p)
+        self.assertEqual(refl, siml)
+        
+    def test_rx_simple(self):
+        """ RX window with realistic RX rate configuration, resetting and gating """
+        refl, siml = compare_csvs("test_rx_simple", self.s, self.p)
+        self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
     unittest.main()
