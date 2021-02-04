@@ -142,20 +142,20 @@ class CsvTest(unittest.TestCase):
         refl, siml = compare_csvs("test_mult_quick", self.s, self.p)
         self.assertEqual(refl, siml)
 
-    # def test_many_quick(self):
-    #     """ Many quick successive state changes on multiple buffers, all 1 cycle apart """
-    #     refl, siml = compare_csvs("test_many_quick", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_many_quick(self):
+        """ Many quick successive state changes on multiple buffers, all 1 cycle apart """
+        refl, siml = compare_csvs("test_many_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
 
-    # def test_stream_quick(self):
-    #     """ Bursts of state changes on multiple buffers with uneven gaps for each individual buffer, each state change 1 cycle apart """
-    #     refl, siml = compare_csvs("test_stream_quick", self.s, self.p)
-    #     self.assertEqual(refl, siml)
+    def test_stream_quick(self):
+        """ Bursts of state changes on multiple buffers with uneven gaps for each individual buffer, each state change 1 cycle apart """
+        refl, siml = compare_csvs("test_stream_quick", self.s, self.p)
+        self.assertEqual(refl, siml)
 
-    # def test_uneven_times(self):
-    #     """ Bursts of state changes on multiple buffers with uneven gaps, each state change uneven numbers of cycles apart """
-    #     refl, siml = compare_csvs("test_uneven_times", self.s, self.p)
-    #     self.assertEqual(refl, siml)    
+    def test_uneven_times(self):
+        """ Bursts of state changes on multiple buffers with uneven gaps, each state change uneven numbers of cycles apart """
+        refl, siml = compare_csvs("test_uneven_times", self.s, self.p)
+        self.assertEqual(refl, siml)    
 
     # @unittest.expectedFailure        
     # def test06_nolat(self):

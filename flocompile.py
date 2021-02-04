@@ -213,10 +213,9 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     #     [1, np.array([5, 6]), np.array([5, 6], dtype=np.uint16), 0],
     #     ]
     
-    last_time = 0
+    # last_time = 0
     last_buf_time_left = np.zeros(16, dtype=np.int32)
     buf_time_left = np.zeros(16, dtype=np.int32)
-    last_instrs = 0
     # buf_empty_time = np.zeros(16, dtype=np.int32)
     debug_print("changes:")
     for k in changes:
@@ -225,8 +224,6 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     for event in changes:
         b_instrs = event[1].size
         dtime = event[0]
-
-        last_instrs = b_instrs
 
         # soak up any extra time which is in excess of what the instructions need to execute synchronously
         excess_dtime = dtime - b_instrs
@@ -246,44 +243,36 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
         dtime_eff = b_instrs
 
         # count down the times until each channel buffer will be empty
-        # buf_time_left = buf_time_left - excess_dtime - 1
-        buf_time_left = buf_time_left - dtime
+        buf_time_left -= excess_dtime
         buf_time_left[buf_time_left < 0] = 0
 
         this_time_offset = event[3]
         last_buf_time_left = buf_time_left
         lbtm = last_buf_time_left.max()
-        debug_print("--- dtime {:d}, dtime_eff {:d}, lbt: ".format(dtime, dtime_eff), last_buf_time_left[5:9])
+        debug_print("--- dtime {:2d}, dtime_eff {:2d}, tto: {:2d}, binstrs: {:2d}, lbtl: ".format(dtime, dtime_eff, this_time_offset, b_instrs), last_buf_time_left[5:9])
         for m, (ind, dat) in enumerate(zip(event[1], event[2])):
-            execution_delay = last_instrs - m - 1 #+ time - 2
+            execution_delay = b_instrs - m - 1 #+ time - 2
             # time_delay = dtime_eff - 1
             lbti = last_buf_time_left[ind]
             buf_empty = lbti <= m # or <= m, need to check
             if buf_empty: # buffer empty for this instruction; need an appropriate delay only for sync
                 # (check against m since with successive cycles, remaining buffers will empty out)
-                # extra_delay = execution_delay + this_time_offset + time_delay
-                # extra_delay = execution_delay + this_time_offset + dtime_eff
                 extra_delay = execution_delay + this_time_offset
-                # buf_time_left[ind] = this_time_offset + 1
-                buf_time_left[ind] = this_time_offset + dtime_eff
+                buf_time_left[ind] = this_time_offset + b_instrs
             else:
                 # buffer already not empty on this cycle, only need extra offset if
                 # some buffers are closer to emptying than others
-                # extra_delay = lbtm - lbti + this_time_offset # + time_delay
                 extra_delay = this_time_offset - lbti + dtime_eff - 1
-                # extra_delay = 1
-                # buf_time_left[ind] += this_time_offset
-                buf_time_left[ind] += 1 + extra_delay
+                buf_time_left[ind] += extra_delay + 1
 
             debug_print("bti={:d} lbti={:d} m={:d} empty={:d} edel={:d} instb i {:d} del {:d} dat {:d}".format(
                 buf_time_left[ind], lbti, m, buf_empty, execution_delay, ind, extra_delay, dat))                
             if extra_delay < 0: st()
-            if True:
-                bdata.append(instb(ind, extra_delay, dat))
-            
-            # st()
+            bdata.append(instb(ind, extra_delay, dat))
 
-    if False: # DEBUG
+        buf_time_left -= b_instrs # take into account execution time of this timestep
+
+    if False: # Manual instructions for debugging
         # case 1
         # bdata.append(instb(5, 2, 1))
         # bdata.append(instb(6, 1, 2))
