@@ -29,10 +29,11 @@ flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
 def compare_csvs(fname, sock, proc,
                  initial_bufs=np.zeros(16, dtype=np.uint16),
                  latencies=np.zeros(16, dtype=np.uint32),
-                 diff_times=True
+                 self_ref=True # use the CSV source file as the reference file to compare the output with
                  ):
 
-    lc = fc.csv2bin(os.path.join("csvs", fname + ".csv"),
+    source_csv = os.path.join("csvs", fname + ".csv")
+    lc = fc.csv2bin(source_csv,
                     quick_start=False, min_grad_clocks=200,
                     initial_bufs=initial_bufs,
                     latencies=latencies)
@@ -49,10 +50,9 @@ def compare_csvs(fname, sock, proc,
     proc.wait(1) # wait a short time for simulator to close
 
     # compare resultant CSV with the reference
-    ref_csv = os.path.join("csvs", "ref_" + fname + ".csv")
     
-    if diff_times:
-        rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
+    if self_ref:
+        rdata = np.loadtxt(source_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(flocra_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
 
         rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
@@ -60,6 +60,7 @@ def compare_csvs(fname, sock, proc,
 
         return rdata.tolist(), sdata.tolist()
     else:
+        ref_csv = os.path.join("csvs", "ref_" + fname + ".csv")
         with open(refpath, "r") as ref:
             refl = ref.read().splitlines()
         with open(flocra_sim_csv, "r") as sim:
