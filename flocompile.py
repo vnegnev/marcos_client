@@ -118,19 +118,23 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     ## TODO: intelligently remove and replace gradient outputs that are
     ## simultaneous, and split them up to use the broadcasts
                 
-    # Write out initial values
+    # Write out initial buffer values
     bdata = []
     addr = 0
     states = initial_bufs
-    for k, ib in enumerate(initial_bufs):
-        bdata.append(instb(k, 15-k, ib))
+    # reversed order, so that grad board is enabled last of all (to avoid spurious initial transfer)
+    for k, ib in enumerate(reversed(initial_bufs)):
+        bdata.append(instb(15-k, k, ib)) 
 
     # TODO: process the grad changelist, depending on what GPA is being used etc
-    # changelist_grad.sort(key=sortfn) # sort by time
-    # TODO: append the grad changelist to the main one
-    
-    # sort the change list
     sortfn = lambda change: change[0]
+    changelist_grad.sort(key=sortfn) # sort by time
+    # TODO: append the grad changelist to the main one
+
+    # add gradient changes
+    changelist += changelist_grad
+    warnings.warn("Do ocra1 too!")
+    
     changelist.sort(key=sortfn) # sort by time
     
     # Process and combine the change list into discrete sets of operations at each time, i.e. an output list

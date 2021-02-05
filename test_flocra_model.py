@@ -8,7 +8,7 @@
 # expected output.
 # 
 # To run a single test, use e.g.:
-# python -m unittest test_flocompile.CsvTest.test_many_quick
+# python -m unittest test_flocra_model.CsvTest.test_many_quick
 
 import sys, os, subprocess, warnings, socket, unittest, time
 import numpy as np
@@ -30,6 +30,24 @@ flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
 # Set to True to debug with GTKWave -- just do one test at a time!
 flocra_sim_fst_dump = False
 flocra_sim_fst = os.path.join("/tmp", "flocra_sim.fst")
+
+fhd_config = {
+    'initial_bufs': np.array([
+        # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
+        # reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
+        (1 << 8) | (10 << 2) | 2,
+        0, 0, 
+        0, 0,
+        0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0], dtype=np.uint16),
+    'latencies': np.array([
+        0, 276, 276, # grad latencies match SPI div
+        0, 0, # rx
+        0, 0, 0, 0, # tx
+        0, 0, 0, 0, 0, 0, # lo phase
+        0 # gates and LEDs
+    ], dtype=np.uint16)}
 
 
 def compare_csvs(fname, sock, proc,
@@ -67,7 +85,7 @@ def compare_csvs(fname, sock, proc,
         return rdata.tolist(), sdata.tolist()
     else:
         ref_csv = os.path.join("csvs", "ref_" + fname + ".csv")
-        with open(refpath, "r") as ref:
+        with open(ref_csv, "r") as ref:
             refl = ref.read().splitlines()
         with open(flocra_sim_csv, "r") as sim:
             siml = sim.read().splitlines()
@@ -194,6 +212,50 @@ class CsvTest(unittest.TestCase):
         """ RX window with realistic RX rate configuration, resetting and gating """
         refl, siml = compare_csvs("test_rx_simple", self.s, self.p)
         self.assertEqual(refl, siml)
+
+    def test_two_uneven_latencies(self):
+        """Simultaneous state changes on two buffers, however 2nd buffer is
+        specified to have 1 cycle of latency more than 1st - so its changes
+        occur earlier to compensate"""
+        refl, siml = compare_csvs("test_two_uneven_latencies", self.s, self.p,
+                                  latencies=np.array([
+                                      0,0,0,0,
+                                      0,0,1,0,
+                                      0,0,0,0,
+                                      0,0,0,0], dtype=np.uint16),
+                                  self_ref=False)
+        self.assertEqual(refl, siml)
+
+    def test_many_uneven_latencies(self):
+        """Simultaneous state changes on four buffers, however they are
+        assumed to all have different latencies relative to each other - thus
+        out-of-sync change requests turn out in sync"""
+        refl, siml = compare_csvs("test_many_uneven_latencies", self.s, self.p,
+                                  latencies=np.array([
+                                      0, 0, 0, # grad
+                                      0, 0, # rx
+                                      2, 4, 6, 8, # tx
+                                      0, 0, 0, 0, 0, 0, # lo phase
+                                      0 # gates and LEDs
+                                  ], dtype=np.uint16),
+                                  self_ref=False)
+        self.assertEqual(refl, siml)
+        
+    def test_fhd_single(self):        
+        gb_orig = fc.grad_board
+        fc.grad_board = "gpa-fhdo"
+        """Single state change on GPA-FHDO x gradient output, default SPI clock divisor"""
+        refl, siml = compare_csvs("test_fhd_single", self.s, self.p, **fhd_config)        
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)
+        
+    def test_fhd_multiple(self):
+        gb_orig = fc.grad_board
+        fc.grad_board = "gpa-fhdo"
+        """Single state change on GPA-FHDO x gradient output, default SPI clock divisor"""
+        refl, siml = compare_csvs("test_fhd_multiple", self.s, self.p, **fhd_config)        
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)        
 
 if __name__ == "__main__":
     unittest.main()
