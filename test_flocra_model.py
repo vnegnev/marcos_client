@@ -31,12 +31,13 @@ flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
 flocra_sim_fst_dump = False
 flocra_sim_fst = os.path.join("/tmp", "flocra_sim.fst")
 
+# Arguments for compare_csvs when running GPA-FHDO tests
 fhd_config = {
     'initial_bufs': np.array([
         # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
         # reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
         (1 << 8) | (10 << 2) | 2,
-        0, 0, 
+        0, 0,
         0, 0,
         0, 0, 0, 0,
         0, 0, 0, 0, 0, 0,
@@ -241,21 +242,45 @@ class CsvTest(unittest.TestCase):
                                   self_ref=False)
         self.assertEqual(refl, siml)
         
-    def test_fhd_single(self):        
+    def test_fhd_single(self):
+        """Single state change on GPA-FHDO x gradient output, default SPI
+        clock divisor; simultaneous change on TX0i"""
         gb_orig = fc.grad_board
         fc.grad_board = "gpa-fhdo"
-        """Single state change on GPA-FHDO x gradient output, default SPI clock divisor"""
         refl, siml = compare_csvs("test_fhd_single", self.s, self.p, **fhd_config)        
         fc.grad_board = gb_orig
         self.assertEqual(refl, siml)
         
     def test_fhd_multiple(self):
+        """A few state changes on GPA-FHDO gradient outputs, default SPI clock divisor"""
         gb_orig = fc.grad_board
         fc.grad_board = "gpa-fhdo"
-        """Single state change on GPA-FHDO x gradient output, default SPI clock divisor"""
         refl, siml = compare_csvs("test_fhd_multiple", self.s, self.p, **fhd_config)        
         fc.grad_board = gb_orig
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
+        
+    def test_fhd_many(self):
+        """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes"""
+        gb_orig = fc.grad_board
+        fc.grad_board = "gpa-fhdo"
+        refl, siml = compare_csvs("test_fhd_many", self.s, self.p, **fhd_config)        
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)
+        
+    def test_fhd_too_fast(self):
+        """Two state changes on GPA-FHDO gradient outputs, default SPI clock
+        divisor - too fast for the divider, second state change won't
+        be applied and server should notice the error
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "gpa-fhdo"
+        with self.assertWarns(RuntimeWarning, msg="expected gpa-fhdo error not observed") as cm:
+            refl, siml = compare_csvs("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
+            
+        fc.grad_board = gb_orig
+        # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
+        self.assertEqual( str(cm.warning) , "ERROR: gpa-fhdo gradient error; possibly missing samples")
+        self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
     unittest.main()

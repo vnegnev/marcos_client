@@ -53,32 +53,32 @@ def instb(tgt, delay, data):
     assert (data & 0xffff) == (data & 0xffffffff), "Data out of range"
     return (IDATA << 24) | ( (tgt & 0x7f) << 24 ) | ( (delay & 0xff) << 16 ) | (data & 0xffff)
 
-def set_ocra1(word, channel, broadcast=False, delay=0):
-    """ Assumes word, channel, delay and broadcast have already been sanitised """
-    word_full = (word << 2) | 0x00100000 | (channel << 25) | (broadcast << 24)
-    word_msb, word_lsb = word_full >> 16, word_full & 0xffff
+# def set_ocra1(word, channel, broadcast=False, delay=0):
+#     """ Assumes word, channel, delay and broadcast have already been sanitised """
+#     word_full = (word << 2) | 0x00100000 | (channel << 25) | (broadcast << 24)
+#     word_msb, word_lsb = word_full >> 16, word_full & 0xffff
 
-    instrs = []
-    instrs.append(instb(GRAD_LSB, word_lsb, delay + 1))
-    instrs.append(instb(GRAD_MSB, word_msb, delay))
-    return instrs
+#     instrs = []
+#     instrs.append(instb(GRAD_LSB, word_lsb, delay + 1))
+#     instrs.append(instb(GRAD_MSB, word_msb, delay))
+#     return instrs
 
 
-def set_gpa_fhdo(word, channel, broadcast=False, delay=0):
-    """ Assumes word, channel, and delay have already been sanitised """
-    word_full = word | 0x80000 | (channel << 16) | (broadcast << 24) # 2 channels in the word
-    word_msb, word_lsb = word_full >> 16, word_full & 0xffff
+# def set_gpa_fhdo(word, channel, broadcast=False, delay=0):
+#     """ Assumes word, channel, and delay have already been sanitised """
+#     word_full = word | 0x80000 | (channel << 16) | (broadcast << 24) # 2 channels in the word
+#     word_msb, word_lsb = word_full >> 16, word_full & 0xffff
 
-    instrs = []
-    instrs.append(instb(GRAD_LSB, word_lsb, delay + 1))
-    instrs.append(instb(GRAD_MSB, word_msb, delay))
-    return instrs
+#     instrs = []
+#     instrs.append(instb(GRAD_LSB, word_lsb, delay + 1))
+#     instrs.append(instb(GRAD_MSB, word_msb, delay))
+#     return instrs
 
-def set_grad(*args, gb=grad_board, **kwargs):
-    if gb == "gpa-fhdo":
-        return set_gpa_fhdo(args, kwargs)
-    elif gb == "ocra1":
-        return set_ocra1(args, kwargs)
-    else:
-        warnings.warn("Undefined grad board")
+# def set_grad(*args, gb=grad_board, **kwargs):
+#     if gb == "gpa-fhdo":
+#         return set_gpa_fhdo(args, kwargs)
+#     elif gb == "ocra1":
+#         return set_ocra1(args, kwargs)
+#     else:
+#         warnings.warn("Undefined grad board")
 

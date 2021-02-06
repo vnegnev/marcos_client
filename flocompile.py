@@ -160,7 +160,7 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
                 current_time = time
             buf_diff = (current_bufs[buf] ^ val) & mask
             assert buf_diff & change_masks[buf] == 0, "Tried to set a buffer to two values at once"
-            if buf_diff == 0:
+            if buf_diff == 0 and buf not in (1, 2): # not one of the gradient update buffers
                 warnings.warn("Instruction will have no effect. Skipping...")
                 continue
             val_masked = val & mask
