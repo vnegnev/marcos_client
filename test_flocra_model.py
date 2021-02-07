@@ -31,7 +31,7 @@ flocra_sim_csv = os.path.join("/tmp", "flocra_sim.csv")
 flocra_sim_fst_dump = False
 flocra_sim_fst = os.path.join("/tmp", "flocra_sim.fst")
 
-# Arguments for compare_csvs when running GPA-FHDO tests
+# Arguments for compare_csvs when running gradient tests
 fhd_config = {
     'initial_bufs': np.array([
         # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
@@ -50,6 +50,23 @@ fhd_config = {
         0 # gates and LEDs
     ], dtype=np.uint16)}
 
+oc1_config = {
+    'initial_bufs': np.array([
+        # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
+        # reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
+        (1 << 8) | (10 << 2) | 1,
+        0, 0,
+        0, 0,
+        0, 0, 0, 0,
+        0, 0, 0, 0, 0, 0,
+        0], dtype=np.uint16),
+    'latencies': np.array([
+        0, 268, 268, # grad latencies match SPI div
+        0, 0, # rx
+        0, 0, 0, 0, # tx
+        0, 0, 0, 0, 0, 0, # lo phase
+        0 # gates and LEDs
+    ], dtype=np.uint16)}
 
 def compare_csvs(fname, sock, proc,
                  initial_bufs=np.zeros(16, dtype=np.uint16),
@@ -274,12 +291,81 @@ class CsvTest(unittest.TestCase):
         """
         gb_orig = fc.grad_board
         fc.grad_board = "gpa-fhdo"
-        with self.assertWarns(RuntimeWarning, msg="expected gpa-fhdo error not observed") as cm:
+        
+        # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
+        with self.assertWarns( RuntimeWarning, msg="expected gpa-fhdo error not observed") as cmr:
+            refl, siml = compare_csvs("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
+        with self.assertWarns( UserWarning, msg="expected flocompile warning not observed") as cmu:
+            self.tearDown()
+            self.setUp()
             refl, siml = compare_csvs("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
             
         fc.grad_board = gb_orig
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
-        self.assertEqual( str(cm.warning) , "ERROR: gpa-fhdo gradient error; possibly missing samples")
+        self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
+        self.assertEqual( str(cmr.warning) , "ERROR: gpa-fhdo gradient error; possibly missing samples")
+        self.assertEqual(refl, siml)
+
+    def test_oc1_single(self):
+        """Single state change on ocra1 x gradient output, default SPI clock
+        divisor; simultaneous change on TX0i
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "ocra1"
+        refl, siml = compare_csvs("test_oc1_single", self.s, self.p, **oc1_config)
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)
+
+    def test_oc1_two(self):
+        """Two sets of simultaneous state changes on ocra1 gradient outputs,
+        default SPI clock divisor
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "ocra1"
+        refl, siml = compare_csvs("test_oc1_two", self.s, self.p, **oc1_config)
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)        
+
+    def test_oc1_four(self):
+        """Four simultaneous state changes on ocra1 gradient outputs, default
+        SPI clock divisor
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "ocra1"
+        refl, siml = compare_csvs("test_oc1_four", self.s, self.p, **oc1_config)
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)
+
+    def test_oc1_many(self):
+        """Multiple simultaneous state changes on ocra1 gradient outputs, default
+        SPI clock divisor
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "ocra1"
+        refl, siml = compare_csvs("test_oc1_many", self.s, self.p, **oc1_config)
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)
+        
+    def test_oc1_too_fast(self):
+        """Two state changes on ocra1 gradient outputs, default SPI clock
+        divisor - too fast for the divider, second state change won't
+        be applied and server should notice the error
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "ocra1"
+        
+        # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
+        with self.assertWarns( RuntimeWarning, msg="expected ocra1 error not observed") as cmr:
+            refl, siml = compare_csvs("test_oc1_too_fast", self.s, self.p, self_ref=False, **oc1_config)
+        with self.assertWarns( UserWarning, msg="expected flocompile warning not observed") as cmu:
+            self.tearDown()
+            self.setUp()
+            refl, siml = compare_csvs("test_oc1_too_fast", self.s, self.p, self_ref=False, **oc1_config)
+            
+        fc.grad_board = gb_orig
+        # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
+        self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
+        self.assertEqual( str(cmr.warning) , "ERROR: ocra1 gradient error; possibly missing samples")
         self.assertEqual(refl, siml)
 
 if __name__ == "__main__":

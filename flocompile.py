@@ -15,7 +15,7 @@ def debug_print(*args, **kwargs):
     # print(*args, **kwargs)
     pass
 
-def col2buf(col_idx, value, gb=grad_board):
+def col2buf(col_idx, value):
     """ Returns a tuple of (buffer indices), (values), (value masks) 
     A value masks specifies which bits are actually relevant on the output."""
     if col_idx in (1, 2, 3, 4): # TX
@@ -25,16 +25,16 @@ def col2buf(col_idx, value, gb=grad_board):
     elif col_idx in (5, 6, 7, 8, 9, 10, 11, 12): # grad
         # Only encode value and channel into words here.  Precise
         # timing and broadcast logic will be handled at the next stage
-        if gb == "gpa-fhdo":
+        if grad_board == "gpa-fhdo":
             if col_idx in (9, 10, 11, 12):
                 raise RuntimeError("GPA-FHDO is selected, but CSV is trying to control OCRA1")
             grad_chan = col_idx - 5
             val_full = value | 0x80000 | ( grad_chan << 16 ) | (grad_chan << 25)
-        elif gb == "ocra1":
+        elif grad_board == "ocra1":
             if col_idx in (5, 6, 7, 8):
                 raise RuntimeError("OCRA1 is selected, but CSV is trying to control GPA-FHDO")
             grad_chan = col_idx - 9                
-            val_full = value << 2 | 0x00100000 | (grad_chan << 25)
+            val_full = value << 2 | 0x00100000 | (grad_chan << 25) | 0x01000000 # always broadcast by default
         else:
             raise ValueError("Unknown grad board")
 
@@ -129,11 +129,41 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     # TODO: process the grad changelist, depending on what GPA is being used etc
     sortfn = lambda change: change[0]
     changelist_grad.sort(key=sortfn) # sort by time
-    # TODO: append the grad changelist to the main one
 
-    # add gradient changes
-    changelist += changelist_grad
-    warnings.warn("Do ocra1 too!")
+    t_last = [0, 0] # no updates have previously happened; [LSB, MSB]
+    spi_div = (initial_bufs[0] & 0xfc) >> 2
+    changelist_grad_shifted = []
+    chgs = [0, 0] # [LSB, MSB]
+    
+    for c in changelist_grad:
+        t = c[0]
+        debug_print("t: ", t, " t_last: ", t_last, "chgs: ", chgs, " c: ", c)
+        idx = c[1] - 1 # 0 for LSB, 1 for MSB
+        msb = idx == 1
+        if t == t_last[idx]:
+            chgs[idx] += 1
+            # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially
+            if grad_board == "ocra1": # simultaneous with another grad update
+                data = c[2]
+                if msb and chgs[1]: # MSB buffer and not the first grad event on this timestep
+                    # turn broadcast off if this isn't the first grad event on this timestep
+                    data = data & ~0x0100
+                # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
+                changelist_grad_shifted.append( (c[0]-chgs[idx], c[1], data, c[3]) )
+                chgs[idx] += 1
+            elif grad_board == "gpa-fhdo":
+                # don't do anything; currently will cause an error
+                # later since multiple events can't happen at the same
+                # time for GPA-FHDO
+                changelist_grad_shifted.append(c) 
+        else:
+            if t - t_last[idx] < 24 * (1 + spi_div) + 2: # 
+                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
+            changelist_grad_shifted.append(c)
+            t_last[idx] = t
+            chgs = [0, 0]
+
+    changelist += changelist_grad_shifted
     
     changelist.sort(key=sortfn) # sort by time
     
