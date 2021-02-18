@@ -134,17 +134,23 @@ def csv2bin(path, quick_start=False, min_grad_clocks=200,
     spi_div = (initial_bufs[0] & 0xfc) >> 2
     changelist_grad_shifted = []
     chgs = [0, 0] # [LSB, MSB]
+    grad_vals = [initial_bufs[1], initial_bufs[2]] # [LSB, MSB] current output data
     
     for c in changelist_grad:
         t = c[0]
         debug_print("t: ", t, " t_last: ", t_last, "chgs: ", chgs, " c: ", c)
         idx = c[1] - 1 # 0 for LSB, 1 for MSB
         msb = idx == 1
+        data = c[2]
+        if data == grad_vals[idx]: # no actual change to buffer output
+            continue # skip this change
+        else:
+            grad_vals[idx] = data # update the last known buffer value
+        
         if t == t_last[idx]:
             chgs[idx] += 1
             # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially
             if grad_board == "ocra1": # simultaneous with another grad update
-                data = c[2]
                 if msb and chgs[1]: # MSB buffer and not the first grad event on this timestep
                     # turn broadcast off if this isn't the first grad event on this timestep
                     data = data & ~0x0100

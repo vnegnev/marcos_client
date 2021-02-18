@@ -67,7 +67,7 @@ def run_streaming_test(data):
         # mem data
         rx_data, msgs = command({'run_seq': data.tobytes()} , s)
 
-        print(msgs)
+        # print(msgs)
 
         # Auto-close server if it's simulating
         if command({'are_you_real':0}, s)[0][4]['are_you_real'] == "simulation":
@@ -420,9 +420,9 @@ def long_loopback():
     lo_amp = 100 # percent
 
     # These settings lead to a fairly normal sequence
-    if True:
+    if False:
         cic0_decimation = 1000
-        cic1_decimation = 50
+        cic1_decimation = 500
         extra_time = 20
         sine_ts = 2000
         max_addr = 400000
@@ -552,16 +552,14 @@ def long_loopback():
     return raw_data
 
 if __name__ == "__main__":
-    # for k in range(1000):
-    # run_test(rx_short(), interval=0.01, timeout=20)
-
+    if False: # flash the LEDs
+        run_streaming_test(leds())
+    
     if False:
         data = long_loopback()
         st()
         
-    if True:
-        # clear mem
-        
+    if False: # single shot, plot RX
         res = run_streaming_test(example_tr_loop())
         # res = run_streaming_test(flocompile_test())
 
@@ -581,10 +579,10 @@ if __name__ == "__main__":
 
         plt.show()
         
-    if False:
-        # clear mem
+    if False: # single shot loopback
         
-        res = run_streaming_test(long_loopback())
+        # res = run_streaming_test(long_loopback())
+        res = run_streaming_test(loopback())
 
         rxd = res[4]['run_seq']
         # offsets = 1e8
@@ -601,6 +599,73 @@ if __name__ == "__main__":
         plt.legend(['rx0_i', 'rx0_q', 'rx1_i', 'rx1_q'])
 
         plt.show()
+
+    if True: # multiple trials, verify mean against saved
+        verify_means = True
+        save_means = False # If true, will overwrite reference data - use with care!
+        
+        trials = 100
+
+        res = run_streaming_test(loopback())
+        rxd = res[4]['run_seq']
+        rx0_pts = len(rxd['rx0_i'])
+        rx1_pts = len(rxd['rx1_i'])
+        
+        rx0_i = np.zeros([trials, rx0_pts], dtype=np.int32)
+        rx0_q = np.zeros([trials, rx0_pts], dtype=np.int32)
+        rx1_i = np.zeros([trials, rx1_pts], dtype=np.int32)
+        rx1_q = np.zeros([trials, rx1_pts], dtype=np.int32)
+        
+        for k in range(trials):
+            res = run_streaming_test(loopback())
+            rxd = res[4]['run_seq']
+            # offsets = 1e8
+            offsets = 0
+            rx0_i[k,:] = np.array(rxd['rx0_i'], dtype=np.int32)
+            rx0_q[k,:] = np.array(rxd['rx0_q'], dtype=np.int32)
+            rx1_i[k,:] = np.array(rxd['rx1_i'], dtype=np.int32)
+            rx1_q[k,:] = np.array(rxd['rx1_q'], dtype=np.int32)
+
+        # plt.legend(['rx0_i', 'rx0_q', 'rx1_i', 'rx1_q'])
+
+        rx0_x = np.arange(rx0_pts)
+        rx1_x = np.arange(rx1_pts)
+
+        props = {'alpha': 0.3}
+        
+        plt.fill_between(rx0_x, rx0_i.min(0), rx0_i.max(0), **props)
+        plt.fill_between(rx0_x, rx0_q.min(0), rx0_q.max(0), **props)
+        plt.fill_between(rx1_x, rx1_i.min(0), rx1_i.max(0), **props)
+        plt.fill_between(rx1_x, rx1_q.min(0), rx1_q.max(0), **props)
+
+        rx0im, rx0qm, rx1im, rx1qm = rx0_i.mean(0), rx0_q.mean(0), rx1_i.mean(0), rx1_q.mean(0)
+        
+        plt.gca().set_prop_cycle(None)
+        plt.plot(rx0_x, rx0im)
+        plt.plot(rx0_x, rx0qm)
+        plt.plot(rx1_x, rx1im)
+        plt.plot(rx1_x, rx1qm)
+
+        if False:
+            plt.plot(rx0_i.std(0))
+            plt.plot(rx0_q.std(0))
+            plt.plot(rx1_i.std(0))
+            plt.plot(rx1_q.std(0))
+
+        ## Verify data
+        if verify_means:
+            ref_data = np.load('ref_loopback.npz')
+            rx0imr, rx0qmr, rx1imr, rx1qmr = ref_data['rx0im'], ref_data['rx0qm'], ref_data['rx1im'], ref_data['rx1qm']
+            # rx0im[10] *= 5 # deliberately stimulate error
+            for rx, rxr in zip([rx0im, rx0qm, rx1im, rx1qm], [rx0imr, rx0qmr, rx1imr, rx1qmr]):
+                diff = ((rx/rx.max() - rxr/rxr.max())**2).sum() / rx.size
+                if diff > 1e-5:
+                    warnings.warn("Normalised loopback data is not as expected!")
+
+        if save_means:
+            np.savez_compressed('ref_loopback.npz', rx0im=rx0im, rx0qm=rx0qm, rx1im=rx1im, rx1qm=rx1qm)
+
+        plt.show()        
     
     if False:
         trials = 1

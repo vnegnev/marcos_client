@@ -35,8 +35,8 @@ flocra_sim_fst = os.path.join("/tmp", "flocra_sim.fst")
 fhd_config = {
     'initial_bufs': np.array([
         # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
-        # reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
-        (1 << 8) | (10 << 2) | 2,
+        # strobe for both LSB and LSB, reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
+        (1 << 9) | (1 << 8) | (10 << 2) | 2,
         0, 0,
         0, 0,
         0, 0, 0, 0,
@@ -53,8 +53,8 @@ fhd_config = {
 oc1_config = {
     'initial_bufs': np.array([
         # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
-        # reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
-        (1 << 8) | (10 << 2) | 1,
+        # strobe for both LSB and LSB, reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
+        (1 << 9) | (1 << 8) | (10 << 2) | 1,
         0, 0,
         0, 0,
         0, 0, 0, 0,
@@ -268,6 +268,15 @@ class CsvTest(unittest.TestCase):
         fc.grad_board = gb_orig
         self.assertEqual(refl, siml)
         
+    def test_fhd_series(self):
+        """Series of state changes on GPA-FHDO x gradient output, default SPI
+        clock divisor """
+        gb_orig = fc.grad_board
+        fc.grad_board = "gpa-fhdo"
+        refl, siml = compare_csvs("test_fhd_series", self.s, self.p, **fhd_config)        
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)
+        
     def test_fhd_multiple(self):
         """A few state changes on GPA-FHDO gradient outputs, default SPI clock divisor"""
         gb_orig = fc.grad_board
@@ -315,6 +324,16 @@ class CsvTest(unittest.TestCase):
         refl, siml = compare_csvs("test_oc1_single", self.s, self.p, **oc1_config)
         fc.grad_board = gb_orig
         self.assertEqual(refl, siml)
+
+    def test_oc1_series(self):
+        """Series of state changes on ocra1 x gradient output, default SPI
+        clock divisor
+        """
+        gb_orig = fc.grad_board
+        fc.grad_board = "ocra1"
+        refl, siml = compare_csvs("test_oc1_series", self.s, self.p, **oc1_config)
+        fc.grad_board = gb_orig
+        self.assertEqual(refl, siml)        
 
     def test_oc1_two(self):
         """Two sets of simultaneous state changes on ocra1 gradient outputs,

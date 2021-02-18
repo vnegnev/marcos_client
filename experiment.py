@@ -5,89 +5,83 @@
 import socket, time, warnings
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy.fft as fft
-import scipy.signal as sig
 
 import pdb
 st = pdb.set_trace
 
 from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
-from ocra_lib.assembler import Assembler
 import grad_board as gb
 import server_comms as sc
+import flocompile as fc
 
 class Experiment:
     """Wrapper class for managing an entire experimental sequence 
 
-    samples: number of (I,Q) samples to acquire during a shot of the experiment
+    lo_freq: local oscillator frequencies, MHz: either single float,
+    iterable of two or iterable of three values. Control three
+    independent LOs. At least a single float must be supplied
 
-    lo_freq: local oscillator frequency, MHz
+    rx_t: RF RX sampling time/s in microseconds; single float or tuple
+    of two.
 
-    tx_t: RF TX sampling time in microseconds; will be rounded to a
-    multiple of system clocks (for the STEMlab-122, it's 122.88
-    MHz). For example if tx_t = 1000, then a new RF TX sample will be
-    output approximately every microsecond.  (self.tx_t will have the
-    true value after construction.)
+    rx_lo: RX local oscillator sources (integers): 0 - 2 correspond to
+    the three LO NCOs, 3 is DC. Single integer or tuple of two.  By
+    default will use local oscillator 0 for both RX channels, unless
+    otherwise specified.
 
-    rx_t: RF RX sampling time in microseconds; as above
-    (approximately). If samples = 100 and rx_t = 1.5, then samples will be
-    taken for 150 us total.  grad
-
-    instruction_file: path to an assembly text file, which will be
-    compiled by the OCRA assembler.py.  If this is not supplied, the
-    instruction bytecode should be supplied manually using
-    define_instructions() before run() is called.
+    csv_file: path to a CSV execution file, which will be
+    compiled with flocompile.py . If this is not supplied, the
+    sequence bytecode should be supplied manually using
+    define_sequence() before run() is called.
 
     OPTIONAL PARAMETERS - ONLY ALTER IF YOU KNOW WHAT YOU'RE DOING
 
-    grad_t: base update period of the gradient DACs *per channel*;
-    e.g. if you're specifying 4 data channels, note that each
-    individual channel will be updated with a period of 4*grad_t
-
-    grad_channels: specify how many channels you will be using (3 =
-    x,y,z, 4 = x,y,z,z2 etc)
-
     spi_freq: frequency to run the gradient SPI interface at - must be
-    high enough to support your desired grad_t but not so high that
-    you experience communication issues. Leave this alone unless you
-    know what you're doing.
+    high enough to support your maximum gradient sample rate but not
+    so high that you experience communication issues. Leave this alone
+    unless you know what you're doing.
 
-    acq_retry_limit: increase this value if you are getting zeros at
-    the start of your acquisition data, or if you have long pauses in
-    your sequence between successive acquisitions. TODO: More info
+    local_grad_board: override local_config.py setting
+
+    print_infos: print debugging messages from server to stdout
+
+    assert_errors: errors returned from the server will be treated as
+    exceptions by the class, halting the program
+
+    init_gpa: initialise the GPA during the construction of this class
     """
 
     def __init__(self,
-                 samples=1000,
-                 lo_freq=5, # MHz
-                 tx_t=0.1, # us, best-effort
-                 rx_t=0.5, # us, best-effort
-                 instruction_file=None,
-                 grad_t=2.5, # us, best-effort
-                 grad_channels=4,
+                 lo_freq, # MHz
+                 rx_t=1, # us, best-effort
+                 csv_file=None,
+                 rx_lo=0,
                  spi_freq=None, # MHz, best-effort
                  local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
-                 acq_retry_limit=50000,
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
-                 init_gpa=False # initialise the GPA (will reset its outputs when the Experiment object is created)
+                 init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
                  ):
-        self.samples = samples
 
-        self.lo_freq_bin = int(np.round(lo_freq / fpga_clk_freq_MHz * (1 << 30))) & 0xfffffff0 | 0xf
-        self.lo_freq = self.lo_freq_bin * fpga_clk_freq_MHz / (1 << 30)
+        # extend lo_freq to 3 elements
+        if type(lo_freq) in (int, float):
+            lo_freq = lo_freq, lo_freq, lo_freq # extend to 3 elements
+        elif len(lo_freq) < 3:
+            lo_freq = lo_freq[0], lo_freq[1], lo_freq[0] # extend from 2 to 3 elements
 
-        self.rx_div = int(np.round(rx_t * fpga_clk_freq_MHz))
-        self.rx_t = self.rx_div / fpga_clk_freq_MHz
+        self.dds_phase_steps = np.round(2**31 / fpga_clk_freq_MHz * np.array(lo_freq)).astype(np.uint32)
+        self.lo_freqs = self.dds_phase_steps * fpga_clk_freq_MHz / (2 ** 31) # real LO freqs
 
-        # Compensate for factor-of-2 discrepancy in sampling
-        self.rx_div_real = self.rx_div // 2 # this is actually what's sent over        
+        if type(rx_t) in (int, float):
+            rx_t = rx_t, rx_t # extend to 2 elements
         
-        self.tx_div = int(np.round(tx_t * fpga_clk_freq_MHz))
-        self.tx_t = self.tx_div / fpga_clk_freq_MHz
+        self.rx_divs = np.round(np.array(rx_t) * fpga_clk_freq_MHz).astype(np.uint32)
+        self.rx_ts = self.rx_divs / fpga_clk_freq_MHz
 
-        self.instruction_file = instruction_file
-        self.asmb = Assembler()
+        if type(rx_lo) == int: 
+            rx_lo = rx_lo, rx_lo # extend to 2 elements
+        
+        self.csv_file = csv_file
 
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect( (ip_address, port) )
@@ -95,21 +89,18 @@ class Experiment:
         if local_grad_board == "auto":
             local_grad_board = grad_board
 
+        ## CONTINUE HERE, FIGURE OUT HOW TO HANDLE LOCAL CALIBRATIONS
+        ## MAYBE SEPARATE EVENT ARRAYS?
+            
         assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
         if local_grad_board == 'ocra1':
             gradb_class = gb.OCRA1
         else:
             gradb_class = gb.GPAFHDO
-        self.gradb = gradb_class(grad_t, grad_channels, self.server_command, spi_freq)
-        self.grad_channels = grad_channels
-        
-        self.acq_retry_limit = acq_retry_limit
+        self.gradb = gradb_class(self.server_command, spi_freq)
 
         self.print_infos = print_infos
         self.assert_errors = assert_errors
-
-        self.clear_tx()
-        self.clear_grad()
 
         if init_gpa:
             self.gradb.init_hw()
@@ -227,8 +218,8 @@ class Experiment:
         if not hasattr(self, 'instructions'):
             self.instructions = self.asmb.assemble(self.instruction_file)
 
-    def define_instructions(self, instructions):
-        self.instructions = instructions
+    def define_bytecode(self, bytecode):
+        self.bytecode = bytecode
 
     def auto_compile(self):
         self.compile_instructions()
@@ -257,26 +248,26 @@ class Experiment:
         return np.frombuffer(reply[4]['acq'], np.complex64), status
 
 def test_Experiment():
-    exp = Experiment(samples=500)
+    exp = Experiment(lo_freq=1)
     
-    # first TX segment
-    t = np.linspace(0, 100, 1001) # goes to 100us, samples every 100ns
-    freq = 0.2 # MHz
-    tx_x = np.cos(2*np.pi*freq*t) + 1j*np.sin(2*np.pi*freq*t)
-    tx_idx = exp.add_tx(tx_x)
+    # # first TX segment
+    # t = np.linspace(0, 100, 1001) # goes to 100us, samples every 100ns
+    # freq = 0.2 # MHz
+    # tx_x = np.cos(2*np.pi*freq*t) + 1j*np.sin(2*np.pi*freq*t)
+    # tx_idx = exp.add_tx(tx_x)
 
-    # first gradient segment
-    tg = np.linspace(0, 500, 51) # goes to 500us, samples every 10us (sampling rate is fixed right now)
-    tmean = 250
-    tstd = 100
+    # # first gradient segment
+    # tg = np.linspace(0, 500, 51) # goes to 500us, samples every 10us (sampling rate is fixed right now)
+    # tmean = 250
+    # tstd = 100
 
-    grad = np.exp(-(tg-tmean)**2/tstd**2) # Gaussian 
-    grad_idx = exp.add_grad(grad, np.zeros_like(grad), np.zeros_like(grad))
+    # grad = np.exp(-(tg-tmean)**2/tstd**2) # Gaussian 
+    # grad_idx = exp.add_grad(grad, np.zeros_like(grad), np.zeros_like(grad))
 
-    data = exp.run()
+    # data = exp.run()
 
-    plt.plot(tg, data)
-    plt.show()
+    # plt.plot(tg, data)
+    # plt.show()
 
 def test_grad_echo():
     exp = Experiment(samples=1900 + 210,
@@ -363,6 +354,6 @@ def test_rx_tx():
     plt.show()
         
 if __name__ == "__main__":
-    # test_Experiment()
-    test_grad_echo()
+    test_Experiment()
+    # test_grad_echo()
     # test_rx_tx()
