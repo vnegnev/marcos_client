@@ -137,7 +137,7 @@ class Experiment:
         self.tx_data = np.empty(0)
         self.tx_data_dirty = True        
 
-    def add_tx(self, vec):
+    def add_tx(self, vec, channel):
         """ vec: complex vector in the I,Q range [-1,1] and [-j,j]; units of full-scale RF DAC output.
         (Note that the magnitude of each element must be <= 1, i.e. np.abs(1+1j) is sqrt(2) and thus too high.)
         
@@ -156,7 +156,7 @@ class Experiment:
         self.current_grad_offset = 0
         self.grad_data_dirty = True
     
-    def add_grad(self, vectors):
+    def add_grad(self, vec, channel):
         """ vectors: list/tuple of real vectors in the range [-1,1] units of full-scale gradient DAC output. Must have the same number of vectors as grad_channels.
         
         Returns the index of the relevant vectors, which can be used later when the pulse sequence is being compiled.
@@ -179,8 +179,18 @@ class Experiment:
 
         return len(self.grad_offsets) - 1
 
+    def compile(self):
+        ## TODO: write this -- send the local update dictionary to dict2bin in flocompile, save the resultant instructions
+
+        ## TODO: integrate this
+        def tx_f2i(farr):
+            """ farr: float array, [-1, 1] """
+            return np.round(32767 * farr).astype(np.uint16)        
+        
+
     def compile_tx_data(self):
         """ go through the TX data and prepare binary array to send to the server """
+
         if self.tx_data.size == 0:
             self.tx_data = np.array([0])
             
