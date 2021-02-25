@@ -131,8 +131,7 @@ def dict2bin(sd, initial_bufs=np.zeros(16, dtype=np.uint16), latencies = np.zero
     changelist = []
     changelist_grad = []
     
-    for k in sd: # iterate over dictionary keys
-        vals = sd[k]
+    for k, vals in sd.items(): # iterate over dictionary keys
         col_idx = col_arr.index(k)
         buf_idces, values, masks = col2buf(col_idx, vals[1]) # array of values
         t_corr = vals[0] - latencies[buf_idces[0]]

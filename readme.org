@@ -1,5 +1,7 @@
 #+TITLE: marcos_client
 
+(NEED TO UPDATE THIS FILE)
+
 Python-based MaRCoS GUI and associated tests.
 
 See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info; specifically the [[https://github.com/vnegnev/marcos_extras/wiki/using_marcos][Using MaRCoS]] and the [[https://github.com/vnegnev/marcos_extras/wiki/marcos_internals][MaRCoS internals]] pages.
@@ -22,20 +24,22 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
 * File description
 
+  csvs/ : CSV files used by test_flocra_model.py
+
   experiment.py : basic API for controlling the MaRCoS server
 
-  examples.py : examples of how to use experiment.py and other libraries
+  examples.py : examples of how to use experiment.py and other libraries [WIP]
 
   local_config.py.example : template file for local configuration; create a copy and name it local_config.py to configure your local setup
 
-  ocra_lib/ : files relating to the OCRA assembler and various assembly scripts (taken from the main ocra repository)
-
   server_comms.py : low-level communication library for the MaRCoS server; use if you wish to write your own API
 
-  test_acquire.py : haphazard collection of tests and miscellaneous data-processing operations, used for preliminary testing of server features before they make it into the API or test_server.py
+  test_flocra.py : hand-written (low-level) examples/tests of the Flocra system
 
-  test_ocra_pulseq.py : tests of the [[https://github.com/lcbMGH/ocra-pulseq][ocra-pulseq]] interface
+  test_flocra_model.py : unit tests of the MaRCoS server + Verilator model of the Flocra HDL
 
-  test_server.py : unit tests to verify the correct version and operation of the MaRCoS server
+  test_ocra_pulseq.py : tests of the [[https://github.com/lcbMGH/ocra-pulseq][ocra-pulseq]] interface [WIP]
+
+  test_server.py : unit tests of the standalone MaRCoS server operation
 
   vlsualiser.py : [WIP] plot expected ocra assembly file outputs (for very basic files)

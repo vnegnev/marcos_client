@@ -5,8 +5,7 @@
 # They need to at least implement the following methods:
 #
 # init_hw() to program the GPA chips on power-up or reset them if
-# they're in an undefined state, as well as configure the FPGA with a
-# suitable gradient BRAM and SPI timing divisors
+# they're in an undefined state
 #
 # write_dac() to send binary numbers directly to a DAC (the method
 # should take care of bit shifts, extra bits etc - the user supplies
@@ -30,39 +29,30 @@
 # reproduce the multi-channel waveform on the GPA - should apply any
 # desired calibrations/transforms internally.
 #
+# key_convert() to convert from the user-facing dictionary key labels
+#
 # TODO: actually use class inheritance here, instead of two separate classes
 
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+import local_config as lc
+grad_clk_t = 1/lc.fpga_clk_freq_MHz # ~8.14ns period for RP-122
 
 class OCRA1:
     def __init__(self,
-                 grad_t,
                  grad_channels,
                  server_command_f,
-                 spi_freq=None):
-
-        grad_clk_t = 0.007 # 7ns period
-        self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
-        self.grad_div = self.true_grad_div - 4 # what's sent to server
+                 max_update_rate=0.1):
+        """ max_update_rate is in MSPS for updates on a single channel; used to choose the SPI clock divider """
         self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
         self.grad_channels = grad_channels
         assert 0 < grad_channels < 5, "Strange number of grad channels"
 
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
-        if spi_freq is not None:
-            self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
-        else:
-            # Auto-decide the SPI freq, to be as low as will work
-
-            # SPI runs in parallel for each channel
-            self.true_spi_div = (self.true_grad_div * grad_channels) // spi_cycles_per_tx
-            
-            if self.true_spi_div > 64:
-                self.true_spi_div = 64 # slowest SPI clock possible
-
-        self.spi_div = self.true_spi_div - 1
+        self.spi_div = int(np.floor(1 / (spi_cycles_per_tx * max_update_rate * grad_clk_t))) - 1
+        if self.spi_div > 63:
+            self.spi_div = 63 # max value, < 100 ksps
         self.grad_ser = 0x1 # select which board serialiser is activated on the firmware
 
         # bind function from Experiment class, or replace with something else for debugging
@@ -73,17 +63,28 @@ class OCRA1:
 
     def init_hw(self):
         init_words = [
+            # lower 24 bits sent to ocra1, upper 8 bits used to control ocra1 serialiser channel + broadcast
             0x00400004, 0x02400004, 0x04400004, 0x07400004, # reset DACs to power-on values
             0x00200002, 0x02200002, 0x04200002, 0x07200002, # set internal amplifier
             0x00100000, 0x02100000, 0x04100000, 0x07100000, # set outputs to 0
         ]
 
+        # configure main grad ctrl word first, in particular switch it to update the serialiser strobe only in response to LSB changes;
+        # strobe the reset of the core just in case
+        # (flocra buffer address = 0, 8 MSBs of the 32-bit word)
+        self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (0 << 8) | (0 << 9)})
+        self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (0 << 9)})
+
         # configure grad ctrl divisors
-        self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
+        # self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
 
         for iw in init_words:
-            # direct commands to grad board
-            self.server_command({'grad_dir': iw})
+            # direct commands to grad board; send MSBs then LSBs
+            self.server_command({'direct': 0x02000000 | (iw >> 16)})
+            self.server_command({'direct': 0x01000000 | (iw & 0xffff)})
+
+        # restore main grad ctrl word to respond to LSB or MSB changes
+        self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (1 << 9)})        
 
     def write_dac(self, channel, value):
         assert 0, "Not yet written, sorry!"
@@ -95,23 +96,14 @@ class OCRA1:
         # Fill more in here
         pass
 
+    def key_convert(self, user_key):
+        # convert key from user-facing dictionary to flocompile format
+        vstr = user_key.split('_')[1]
+        return "ocra1_" + vstr
+
     def float2bin(self, grad_data):
-        grad_bram_data = np.zeros(grad_data[0].size * self.grad_channels, dtype=np.uint32)
-
-        for ch, gd in enumerate(grad_data):
-            cv = self.cal_values[ch]
-            gd_cal = gd * cv[0] + cv[1]
-            
-            # 2's complement
-            gr_dacbits = np.round(131071 * gd_cal).astype(np.uint32) & 0x3ffff 
-            gr = (gr_dacbits << 2) | 0x00100000
-
-            # always broadcast for the final channel
-            broadcast = ch == self.grad_channels - 1                
-
-            grad_bram_data[ch::self.grad_channels] = gr | (ch << 25) | (broadcast << 24) # interleave data
-
-        return grad_bram_data            
+        gd_cal = gd * cv[0] + cv[1] # calibration
+        return np.round(131071 * gd_cal).astype(np.uint32) & 0x3ffff # 2's complement
 
 class GPAFHDO:
     def __init__(self,
@@ -120,6 +112,8 @@ class GPAFHDO:
                  server_command_f,                 
                  spi_freq=None):
 
+        assert False, "not yet implemented"
+        
         grad_clk_t = 0.007 # 7ns period
         self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
         self.grad_div = self.true_grad_div - 4 # what's sent to server
