@@ -57,13 +57,21 @@ class Experiment:
                  seq_dict=None,
                  seq_csv=None,
                  rx_lo=0,
-                 spi_freq=None, # MHz, best-effort
+                 spi_freq=5, # MHz, best-effort -- default supports at least 100 ksps
                  local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
+                 initial_wait=1, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least 1us
+                 prev_socket=None # previously-opened socket, if want to maintain status etc
                  ):
 
+        # create socket early so that destructor works
+        if prev_socket is None:
+            self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        else:
+            self._s = prev_socket
+        
         # extend lo_freq to 3 elements
         if type(lo_freq) in (int, float):
             lo_freq = lo_freq, lo_freq, lo_freq # extend to 3 elements
@@ -75,21 +83,23 @@ class Experiment:
 
         if type(rx_t) in (int, float):
             rx_t = rx_t, rx_t # extend to 2 elements
-        
+
+        # TODO: enable variable rates during a single TR
         self._rx_divs = np.round(np.array(rx_t) * fpga_clk_freq_MHz).astype(np.uint32)
         self._rx_ts = self._rx_divs / fpga_clk_freq_MHz
 
         if type(rx_lo) == int: 
             rx_lo = rx_lo, rx_lo # extend to 2 elements
 
+        self._initial_wait = initial_wait
+
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
         if seq_dict is not None:
-            self._seq = seq_dict
             self._csv = None
-        elif seq_csv is not None:
-        self._csv = seq_csv
-
-        self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.replace_dict(seq_dict)
+        else:
+            self._csv = seq_csv # None unless a CSV was supplied
+            
         self._s.connect( (ip_address, port) )
         
         if local_grad_board == "auto":
@@ -100,13 +110,13 @@ class Experiment:
             gradb_class = gb.OCRA1
         else:
             gradb_class = gb.GPAFHDO
-        self._gradb = gradb_class(self.server_command, spi_freq)
+        self.gradb = gradb_class(self.server_command, spi_freq)
 
         self._print_infos = print_infos
         self._assert_errors = assert_errors
 
         if init_gpa:
-            self._gradb.init_hw()
+            self.gradb.init_hw()
 
     def __del__(self):
         self._s.close()
@@ -134,56 +144,10 @@ class Experiment:
 
         return reply, return_status
 
-    # def clear_tx(self):
-    #     self._tx_offsets = []
-    #     self._current_tx_offset = 0
-    #     self._tx_data = np.empty(0)
-    #     self._tx_data_dirty = True
-
-    # def add_tx(self, vec, channel):
-    #     """ vec: complex vector in the I,Q range [-1,1] and [-j,j]; units of full-scale RF DAC output.
-    #     (Note that the magnitude of each element must be <= 1, i.e. np.abs(1+1j) is sqrt(2) and thus too high.)
-        
-    #     Returns the index of the relevant vector, which can be used later when the pulse sequence is being compiled.
-    #     """
-    #     self._tx_data_dirty = True
-    #     self._tx_offsets.append(self._current_tx_offset)
-    #     self._current_tx_offset += vec.size
-    #     self._tx_data = np.hstack( [self._tx_data, vec] )
-
-    #     return len(self._tx_offsets) - 1
-
-    # def clear_grad(self):
-    #     self._grad_data = [np.empty(0) for k in range(self._grad_channels)]
-    #     self._grad_offsets = []
-    #     self._current_grad_offset = 0
-    #     self._grad_data_dirty = True
-    
-    # def add_grad(self, vec, channel):
-    #     """ vectors: list/tuple of real vectors in the range [-1,1] units of full-scale gradient DAC output. Must have the same number of vectors as grad_channels.
-        
-    #     Returns the index of the relevant vectors, which can be used later when the pulse sequence is being compiled.
-    #     """
-    #     self._grad_data_dirty = True
-    #     assert len(vectors) == self._grad_channels, "One vector required for each gradient channel"
-    #     vsz = vectors[0].size
-    #     for v in vectors[1:]:
-    #         assert v.size == vsz, "Supply equal-length vectors for all the gradients."
-                 
-    #     self._grad_offsets.append(self._current_grad_offset)
-    #     self._current_grad_offset += vsz
-
-    #     if not hasattr(self, 'grad_data'):
-    #         self.clear_grad()
-
-    #     for k, v in enumerate(vectors):
-    #         assert np.all( (-1 <= v) & (v <= 1) ), "Grad data out of range"
-    #         self._grad_data[k] = np.hstack( [self._grad_data[k], v] )
-
-    #     return len(self._grad_offsets) - 1
-
     def replace_dict(self, seq_dict):
         assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
+        self._seq = {}
+        self._seq_compiled = False
 
         ## Various functions to handle the conversion
         def times_us(farr):
@@ -201,7 +165,7 @@ class Experiment:
 
         for key, (times, vals) in seq_dict.items():
             # each possible dictionary entry returns a tuple (even if one element) for the binary dictionary to send to flocompile
-            tbin = times_us(times)
+            tbin = times_us(times + self._initial_wait)
             if key in ['tx0_i', 'tx0_q', 'tx1_i', 'tx1_q']:
                 valbin = tx_real(vals),
                 keybin = key,
@@ -210,89 +174,68 @@ class Experiment:
                 keybin = key + '_i', key + '_q'
             elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2', 'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2']:
                 # flocompile will figure out whether the key matches the selected grad board
-                valbin = self._gradb.float2bin(vals),
-                keybin = key
+                keybin = key,
+                valbin = self.gradb.float2bin(vals),
             elif key in ['rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out']:
+                keybin = key,
                 # binary-valued data
-                valbin = vals.astype(np.int32)
+                valbin = vals.astype(np.int32),
                 assert np.all( (0 <= valbin) & (valbin <= 1) ), "Binary columns must be [0,1] or [False, True] valued"
-                ## TODO: continue here!
+            elif key in ['leds']:
+                keybin = key,
+                valbin = vals.astype(np.uint8), # 8-bit value
 
-        # def grad(farr):
-        #     """ farr: complex float array, [-1, 1] -- return value will already calibrated """
-        #     return self._gradb.float2bin(farr)
-        
-    # def compile_tx_data(self):
-    #     """ go through the TX data and prepare binary array to send to the server """
+            for k, v in zip(keybin, valbin):
+                self._seq[k] = (tbin, v)
 
-    #     if self._tx_data.size == 0:
-    #         self.tx_data = np.array([0])
+    def compile(self):
+        """Convert either dictionary or CSV file into machine code, with
+        extra machine code at the start to ensure the system is initialised to
+        the correct state.
+
+        Initially, configure the RX rates and set the LEDs.
+        Remainder of the sequence will be as programmed.
+        """
+
+        # RX and LO configuration
+        tstart = 50 # cycles before doing anything
+        rx_wait = 50 # cycles to run RX before setting rate, then later resetting again
+        initial_cfg = {'rx0_rate': ( np.array([tstart + rx_wait]), np.array([self._rx_divs[0]]) ),
+                       'rx1_rate': ( np.array([tstart + rx_wait]), np.array([self._rx_divs[1]]) ),
+                       'rx0_rate_valid': ( np.array([tstart + rx_wait, tstart + rx_wait + 1]), np.array([1, 0]) ),
+                       'rx1_rate_valid': ( np.array([tstart + rx_wait, tstart + rx_wait + 1]), np.array([1, 0]) ),
+                       'rx0_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       'rx1_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       'lo0_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[0]]) ),
+                       'lo1_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[1]]) ),
+                       'lo2_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[2]]) ),
+                       'lo0_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
+                       'lo1_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
+                       'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
+                       }
+        self._seq.update(initial_cfg)
+        self._binseq = np.array( fc.dict2bin(self._seq,
+                                             self.gradb.bin_config['initial_bufs'],
+                                             self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
+                                             ), dtype=np.uint32 )
             
-    #     self.tx_bytes = bytearray(self.tx_data.size * 4)
-    #     if np.any(np.abs(self.tx_data) > 1.0):
-    #         warnings.warn("TX data too large! Overflow will occur.")
-        
-    #     tx_i = np.round(32767 * self.tx_data.real).astype(np.uint16)
-    #     tx_q = np.round(32767 * self.tx_data.imag).astype(np.uint16)
-
-    #     # TODO: find a better way to encode the interleaved bytearray
-    #     self.tx_bytes[::4] = (tx_i & 0xff).astype(np.uint8).tobytes()
-    #     self.tx_bytes[1::4] = (tx_i >> 8).astype(np.uint8).tobytes()
-    #     self.tx_bytes[2::4] = (tx_q & 0xff).astype(np.uint8).tobytes()
-    #     self.tx_bytes[3::4] = (tx_q >> 8).astype(np.uint8).tobytes()
-    #     self.tx_data_dirty = False
-
-    # def compile_grad_data(self):
-    #     """ go through the grad data and prepare binary array to send to the server """
-    #     if not hasattr(self, 'grad_data'):
-    #         self.clear_grad()
-
-    #     if self.grad_data[0].size == 0:
-    #         self.grad_data = [np.array([0]) for k in range(self.grad_channels)]
-
-    #     grad_bram_data = self.gradb.float2bin(self.grad_data) # grad board-specific transformation
-            
-    #     self.grad_bytes = grad_bram_data.tobytes()
-    #     self.grad_data_dirty = False
-    #     self.grad_data_unsent = True
-
-    # def compile_instructions(self):
-    #     # For now quite simple (using the ocra assembler)
-    #     # Will use a more advanced approach in the future to avoid having to hand-code the instruction files
-    #     if not hasattr(self, 'instructions'):
-    #         self.instructions = self.asmb.assemble(self.instruction_file)
-
-    # def define_bytecode(self, bytecode):
-    #     self.bytecode = bytecode
-
-    # def auto_compile(self):
-    #     self.compile_instructions()
-    #     if self.tx_data_dirty:
-    #         self.compile_tx_data()
-    #     if self.grad_data_dirty:
-    #         self.compile_grad_data()
-
     def run(self):
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
-        self.auto_compile()        
-        reply, status = self.server_command({
-            'lo_freq': self.lo_freq_bin,
-            'rx_div': self.rx_div_real,
-            'tx_div': self.tx_div,
-            'tx_size': self.tx_data.size * 4,
-            'raw_tx_data': self.tx_bytes,
-            'grad_div': (self.gradb.grad_div, self.gradb.spi_div),
-            'grad_ser': self.gradb.grad_ser,
-            'grad_mem': self.grad_bytes,
-            'seq_data': self.instructions,
-            'acq_rlim': self.acq_retry_limit,
-            'acq': self.samples})
+
+        if self._seq_compiled is False:
+            self.compile()
+        
+        rx_data, msgs = sc.command({'run_seq': self._binseq.tobytes()}, self._s)
+        st()
         
         return np.frombuffer(reply[4]['acq'], np.complex64), status
 
 def test_Experiment():
-    exp = Experiment(lo_freq=1)
+    sd = {'tx0_i': ( np.array([1,2,10]), np.array([-0.5, 0.5, 0.9]) )}
+    exp = Experiment(lo_freq=1, seq_dict=sd)
+    exp.run()
+    st()
     
     # # first TX segment
     # t = np.linspace(0, 100, 1001) # goes to 100us, samples every 100ns

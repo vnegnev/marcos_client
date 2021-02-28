@@ -63,6 +63,16 @@ def col2buf(col_idx, value):
         buf_idx = 15,
         val = value << 8,
         mask = 0xff00,
+    elif col_idx in (23, 24, 25): # LO freqs
+        lo_lsb_buf = 9 + 2*(col_idx - 23) # 9, 11 or 13
+        buf_idx = lo_lsb_buf, lo_lsb_buf + 1
+        val = value & 0xffff, value >> 16
+        mask = 0xffff, 0x7fff
+    elif col_idx in (26, 27, 28): # LO phase reset
+        lo_msb_buf = 10 + 2*(col_idx - 26)
+        buf_idx = lo_msb_buf,
+        val = value << 15,
+        mask = 0x8000,
 
     return buf_idx, val, mask
 
@@ -126,14 +136,15 @@ def dict2bin(sd, initial_bufs=np.zeros(16, dtype=np.uint16), latencies = np.zero
 
     col_arr = ['clock cycles', 'tx0_i', 'tx0_q', 'tx1_i', 'tx1_q', 'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
                'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2', 'rx0_rate', 'rx1_rate', 'rx0_rate_valid',
-               'rx1_rate_valid', 'rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out', 'leds']
+               'rx1_rate_valid', 'rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out', 'leds',
+               'lo0_freq', 'lo1_freq', 'lo2_freq', 'lo0_rst', 'lo1_rst', 'lo2_rst'] # TODO: this row isn't yet in the CSV and isn't tested by test_flocra_model.py
 
     changelist = []
     changelist_grad = []
     
     for k, vals in sd.items(): # iterate over dictionary keys
         col_idx = col_arr.index(k)
-        buf_idces, values, masks = col2buf(col_idx, vals[1]) # array of values
+        buf_idces, values, masks = col2buf(col_idx, vals[1]) # single element or array of values
         t_corr = vals[0] - latencies[buf_idces[0]]
         for bi, vv, m in zip(buf_idces, values, masks):
             for t, v in zip(t_corr, vv):

@@ -37,17 +37,14 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 import local_config as lc
+
 grad_clk_t = 1/lc.fpga_clk_freq_MHz # ~8.14ns period for RP-122
 
 class OCRA1:
     def __init__(self,
-                 grad_channels,
                  server_command_f,
                  max_update_rate=0.1):
         """ max_update_rate is in MSPS for updates on a single channel; used to choose the SPI clock divider """
-        self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
-        self.grad_channels = grad_channels
-        assert 0 < grad_channels < 5, "Strange number of grad channels"
 
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
         self.spi_div = int(np.floor(1 / (spi_cycles_per_tx * max_update_rate * grad_clk_t))) - 1
@@ -60,6 +57,24 @@ class OCRA1:
 
         # Default calibration settings for all channels: linear transformation for now
         self.cal_values = [ (1,0), (1,0), (1,0), (1,0) ]
+        
+        self.bin_config = {
+            'initial_bufs': np.array([
+                # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
+                # strobe for both LSB and LSB, reset_n = 1, spi div as given, grad board select (1 = ocra1, 2 = gpa-fhdo)
+                (1 << 9) | (1 << 8) | (self.spi_div << 2) | 1,
+                0, 0,
+                0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0,
+                0], dtype=np.uint16),
+            'latencies': np.array([
+                0, 268, 268, # grad latencies match SPI div
+                0, 0, # rx
+                0, 0, 0, 0, # tx
+                0, 0, 0, 0, 0, 0, # lo phase
+                0 # gates and LEDs
+            ], dtype=np.uint16)}
 
     def init_hw(self):
         init_words = [
@@ -74,9 +89,6 @@ class OCRA1:
         # (flocra buffer address = 0, 8 MSBs of the 32-bit word)
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (0 << 8) | (0 << 9)})
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (0 << 9)})
-
-        # configure grad ctrl divisors
-        # self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})
 
         for iw in init_words:
             # direct commands to grad board; send MSBs then LSBs
@@ -112,38 +124,56 @@ class GPAFHDO:
                  server_command_f,                 
                  spi_freq=None):
 
-        assert False, "not yet implemented"
+        # assert False, "not yet implemented"
         
-        grad_clk_t = 0.007 # 7ns period
-        self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
-        self.grad_div = self.true_grad_div - 4 # what's sent to server
-        self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
-        self.grad_channels = grad_channels
-        assert 0 < grad_channels < 5, "Strange number of grad channels"
+        # grad_clk_t = 0.007 # 7ns period
+        # self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
+        # self.grad_div = self.true_grad_div - 4 # what's sent to server
+        # self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
+        # self.grad_channels = grad_channels
+        # assert 0 < grad_channels < 5, "Strange number of grad channels"
 
-        self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
-        # initialize gpa fhdo calibration with ideal values
-        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
+        # self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
+        # # initialize gpa fhdo calibration with ideal values
+        # self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        # self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
 
-        spi_cycles_per_tx = 30 # actually 24, but including some overhead
-        if spi_freq is not None:
-            self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
-        else:
-            # SPI must be written sequentially for each channel
-            self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
+        # spi_cycles_per_tx = 30 # actually 24, but including some overhead
+        # if spi_freq is not None:
+        #     self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
+        # else:
+        #     # SPI must be written sequentially for each channel
+        #     self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
 
-            if self.true_spi_div > 64:
-                self.true_spi_div = 64 # slowest SPI clock possible
+        #     if self.true_spi_div > 64:
+        #         self.true_spi_div = 64 # slowest SPI clock possible
 
-        self.spi_div = self.true_spi_div - 1
-        self.grad_ser = 0x2 # select which board serialiser is activated on the firmware
+        # self.spi_div = self.true_spi_div - 1
+        # self.grad_ser = 0x2 # select which board serialiser is activated on the firmware
 
-        if self.spi_div < 6:
-            warnings.warn('the fastest possible spi_div for GPA FHDO is 6 - check your settings!')
+        # if self.spi_div < 6:
+        #     warnings.warn('the fastest possible spi_div for GPA FHDO is 6 - check your settings!')
 
-        # bind function from Experiment class, or replace with something else for debugging
-        self.server_command = server_command_f 
+        # # bind function from Experiment class, or replace with something else for debugging
+        # self.server_command = server_command_f
+
+        self.bin_config = {
+            'initial_bufs': np.array([
+                # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
+                # strobe for both LSB and LSB, reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
+                (1 << 9) | (1 << 8) | (self.spi_div << 2) | 2,
+                0, 0,
+                0, 0,
+                0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0,
+                0], dtype=np.uint16),
+            'latencies': np.array([
+                0, 276, 276, # grad latencies match SPI div
+                0, 0, # rx
+                0, 0, 0, 0, # tx
+                0, 0, 0, 0, 0, 0, # lo phase
+                0 # gates and LEDs
+            ], dtype=np.uint16)}
 
     def init_hw(self):
         init_words = [
