@@ -41,13 +41,13 @@ fhd_config = {
         0, 0,
         0, 0, 0, 0,
         0, 0, 0, 0, 0, 0,
-        0], dtype=np.uint16),
+        0, 0], dtype=np.uint16),
     'latencies': np.array([
         0, 276, 276, # grad latencies match SPI div
         0, 0, # rx
         0, 0, 0, 0, # tx
         0, 0, 0, 0, 0, 0, # lo phase
-        0 # gates and LEDs
+        0, 0 # gates and LEDs, RX config
     ], dtype=np.uint16)}
 
 oc1_config = {
@@ -59,18 +59,18 @@ oc1_config = {
         0, 0,
         0, 0, 0, 0,
         0, 0, 0, 0, 0, 0,
-        0], dtype=np.uint16),
+        0, 0], dtype=np.uint16),
     'latencies': np.array([
         0, 268, 268, # grad latencies match SPI div
         0, 0, # rx
         0, 0, 0, 0, # tx
         0, 0, 0, 0, 0, 0, # lo phase
-        0 # gates and LEDs
+        0, 0 # gates and LEDs, RX config
     ], dtype=np.uint16)}
 
 def compare_csv(fname, sock, proc,
-                 initial_bufs=np.zeros(16, dtype=np.uint16),
-                 latencies=np.zeros(16, dtype=np.uint32),
+                 initial_bufs=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint16),
+                 latencies=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint32),
                  self_ref=True # use the CSV source file as the reference file to compare the output with
                  ):
 
@@ -105,8 +105,8 @@ def compare_csv(fname, sock, proc,
         return refl, siml
 
 def compare_dict(source_dict, ref_fname, sock, proc,                 
-                 initial_bufs=np.zeros(16, dtype=np.uint16),
-                 latencies=np.zeros(16, dtype=np.uint32),
+                 initial_bufs=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint16),
+                 latencies=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint32),
                  ignore_start_delay=True
                  ):
 
@@ -267,7 +267,7 @@ class ModelTest(unittest.TestCase):
         """ Configuration and LED bits/words """
         refl, siml = compare_csv("test_cfg", self.s, self.p)
         self.assertEqual(refl, siml)
-        
+
     def test_rx_simple(self):
         """ RX window with realistic RX rate configuration, resetting and gating """
         refl, siml = compare_csv("test_rx_simple", self.s, self.p)
@@ -282,7 +282,8 @@ class ModelTest(unittest.TestCase):
                                       0,0,0,0,
                                       0,0,1,0,
                                       0,0,0,0,
-                                      0,0,0,0], dtype=np.uint16),
+                                      0,0,0,0,
+                                      0], dtype=np.uint16),
                                   self_ref=False)
         self.assertEqual(refl, siml)
 
@@ -296,7 +297,7 @@ class ModelTest(unittest.TestCase):
                                       0, 0, # rx
                                       2, 4, 6, 8, # tx
                                       0, 0, 0, 0, 0, 0, # lo phase
-                                      0 # gates and LEDs
+                                      0, 0 # gates and LEDs, RX config
                                   ], dtype=np.uint16),
                                   self_ref=False)
         self.assertEqual(refl, siml)
@@ -326,7 +327,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_fhd_multiple", self.s, self.p, **fhd_config)        
         fc.grad_board = gb_orig
         self.assertEqual(refl, siml)
-        
+
     def test_fhd_many(self):
         """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes"""
         gb_orig = fc.grad_board
@@ -473,7 +474,7 @@ class ModelTest(unittest.TestCase):
              }
         refl, siml = compare_dict(d, "test_cfg", self.s, self.p)
         self.assertEqual(refl, siml)
-        
+
     def test_fhd_many_dict(self):
         """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes. Dict version"""
         gb_orig = fc.grad_board

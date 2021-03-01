@@ -53,10 +53,10 @@ class Experiment:
 
     def __init__(self,
                  lo_freq, # MHz
-                 rx_t=1, # us, best-effort
+                 rx_t=1, # us, best-effort 
                  seq_dict=None,
                  seq_csv=None,
-                 rx_lo=0,
+                 rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
                  spi_freq=5, # MHz, best-effort -- default supports at least 100 ksps
                  local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
                  print_infos=True, # show server info messages
@@ -90,6 +90,7 @@ class Experiment:
 
         if type(rx_lo) == int: 
             rx_lo = rx_lo, rx_lo # extend to 2 elements
+        self._rx_lo = rx_lo
 
         self._initial_wait = initial_wait
 
@@ -212,7 +213,10 @@ class Experiment:
                        'lo0_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
                        'lo1_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
                        'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
+                       'rx0_lo': ( np.array([tstart]), np.array([self._rx_lo[0]]) ),
+                       'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ),
                        }
+        
         self._seq.update(initial_cfg)
         self._binseq = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],

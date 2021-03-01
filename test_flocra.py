@@ -99,6 +99,13 @@ def flocompile_test():
     print(raw_data.size)
     return raw_data
 
+# Utility function to generate RX control words instead of doing it inline
+def rx_ctrl(delay, rx0_rst_n, rx1_rst_n, rx0_rate_valid, rx1_rate_valid,
+            rx0_lo, rx1_lo):
+    return instb( RX_CTRL, delay,
+                  (rx1_rst_n << 7) | (rx0_rst_n << 6) | (rx1_rate_valid << 5) | (rx0_rate_valid << 4) \
+                  | (rx1_lo << 2) | (rx0_lo << 0) )
+
 def example_tr_loop():
     lo_freq0 = 5 # MHz
     lo_freq1 = 6 # MHz
@@ -134,22 +141,20 @@ def example_tr_loop():
     raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
 
     # configure RX settings: both channels to use DDS source 0
-    # reset CICs
-    raw_data[addr] = instb(RX0_CTRL, 1, 0x0000); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
+    # reset CICs    
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, 0, 0); addr += 1
     # take them out of reset later
-    raw_data[addr] = instb(RX0_CTRL, 40, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 39, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
-    # briefly signal that there's a new rate
-    raw_data[addr] = instb(RX0_CTRL, 40, 0xc000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 40, 0xc000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
-    # end the new rate flag (the output buffers are not empty so no offset time is needed)
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 0, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
-    
-    # bring them back into reset a bit later, to prepare for future acquisitions
-    raw_data[addr] = instb(RX0_CTRL, 40, 0x0000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 40, 0x0000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = rx_ctrl(40, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    # set control buses to new rates (immediately for now)
+    raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
+    raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
+
+    # briefly signal that there's a new rate    
+    raw_data[addr] = rx_ctrl(40, 1, 1, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
+    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+
+    # bring CICs back into reset a bit later, to prepare for future acquisitions
+    raw_data[addr] = rx_ctrl(40, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
 
     for k in range(tr_loops):
 
@@ -181,11 +186,9 @@ def example_tr_loop():
 
         # Wait then acquire some data, wait some more, stop acquisition
         raw_data[addr] = insta(IWAIT, 100 - 4 - addr + addr_tx_end); addr += 1 # wait 100 cycles
-        raw_data[addr] = instb(RX0_CTRL, 1, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-        raw_data[addr] = instb(RX1_CTRL, 0, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+        raw_data[addr] = rx_ctrl(40, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
         raw_data[addr] = insta(IWAIT, 500 - 5); addr += 1 # wait 500 cycles
-        raw_data[addr] = instb(RX0_CTRL, 1, 0x0000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-        raw_data[addr] = instb(RX1_CTRL, 0, 0x0000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1
+        raw_data[addr] = rx_ctrl(40, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
 
     # Go idle
     raw_data[addr] = insta(IFINISH, 0); addr += 1
@@ -283,22 +286,28 @@ def rx_short():
     
     # configure RX settings: both channels to use DDS source 3 (DC), decimation of 10
     # reset CICs
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x0000); addr += 1
+    ## raw_data[addr] = instb(RX0_CTRL, 0, 0x0000); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, 0, 0); addr += 1    
     # raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
     # take them out of reset later
-    raw_data[addr] = instb(RX0_CTRL, 50, 0x8000 | cic_decimation | (dds_demod_ch << 12) ); addr += 1
+    ## raw_data[addr] = instb(RX0_CTRL, 50, 0x8000 | cic_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = rx_ctrl(50, 1, 0, 0, 0, dds_demod_ch, 0); addr += 1
+    raw_data[addr] = instb(RX0_RATE, 0, cic_decimation); addr += 1
     # briefly signal that there's a new rate
-    raw_data[addr] = instb(RX0_CTRL, 50, 0xc000 | cic_decimation | (dds_demod_ch << 12) ); addr += 1    
+    ## raw_data[addr] = instb(RX0_CTRL, 50, 0xc000 | cic_decimation | (dds_demod_ch << 12) ); addr += 1
+    raw_data[addr] = rx_ctrl(50, 1, 0, 1, 0, dds_demod_ch, 0); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
     # end the new rate flag (the buffers are not empty so no offset time is needed)
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x8000 | cic_decimation | (dds_demod_ch << 12) ); addr += 1 # decimation may not be needed here
+    ## raw_data[addr] = instb(RX0_CTRL, 0, 0x8000 | cic_decimation | (dds_demod_ch << 12) ); addr += 1 # decimation may not be needed here
+    raw_data[addr] = rx_ctrl(0, 1, 0, 0, 0, dds_demod_ch, 0); addr += 1    
     # raw_data[addr] = instb(RX1_CTRL, 0, 0xb000 | cic_decimation); addr += 1
 
     # just acquire data for a while
     raw_data[addr] = insta(IWAIT, acquisition_ticks - 1); addr += 1
 
     # reset RX again
-    raw_data[addr] = instb(RX0_CTRL, 1, 0x3000); addr += 1
+    ## raw_data[addr] = instb(RX0_CTRL, 1, 0x3000); addr += 1
+    raw_data[addr] = rx_ctrl(1, 0, 0, 0, 0, dds_demod_ch, 0); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 0, 0x3000); addr += 1
 
     # turn off DDS0
@@ -349,19 +358,37 @@ def loopback():
 
     # configure RX settings: both channels to use DDS source 3 (DC), decimation of 10
     # reset CICs
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x0000); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
     # take them out of reset later
-    raw_data[addr] = instb(RX0_CTRL, 40, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 39, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    raw_data[addr] = rx_ctrl(40, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
+    raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
     # briefly signal that there's a new rate
-    raw_data[addr] = instb(RX0_CTRL, 40, 0xc000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 40, 0xc000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    raw_data[addr] = rx_ctrl(40, 1, 1, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
     # end the new rate flag (the buffers are not empty so no offset time is needed)
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1 # decimation may not be needed here
-    raw_data[addr] = instb(RX1_CTRL, 0, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
-    # raw_data[addr] = instb(RX1_CTRL, 0, 0xb000 | cic_decimation); addr += 1    
+    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+
+    # Wait a bit, so that all buffers are emptied
+    raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
+
+    ## NOTE: example of how to send arbitrary data to RX0 or RX1 CIC:
+    # first, set the output bus to the data you want to send (in this case, cic0_decimation)
+    raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
+    # next, strobe the 'bus 0 valid' line of the RX control buffer (no delays needed if it's not the Xilinx CIC)
+    raw_data[addr] = rx_ctrl(0, 1, 1, 1, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    # same for channel 1:
+    raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
+    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 1, dds_demod_ch, dds_demod_ch); addr += 1
+    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    # wait 100 cycles and reset both CICs, then wait 100 more and take them out of reset
+    raw_data[addr] = rx_ctrl(100, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    raw_data[addr] = rx_ctrl(100, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1    
+
+    # Wait a bit, so that all buffers are emptied
+    raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
     
     steps = 300
     pattern0 = np.hstack([ np.linspace(1, 0, steps//3), np.linspace(1, -1, steps//3), np.linspace(-1, 1, steps//3) ])
@@ -400,8 +427,7 @@ def loopback():
     raw_data[addr] = insta(IWAIT, int(extra_time * fpga_clk_freq_MHz)); addr += 1
 
     # end RX
-    raw_data[addr] = instb(RX0_CTRL, 1, 0x0000); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
     
     # go idle
     raw_data[addr] = instb(TX0_I, 3, 0); addr += 1
@@ -470,18 +496,17 @@ def long_loopback():
 
     # configure RX settings: both channels to use DDS source 3 (DC), decimation of 10
     # reset CICs
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x0000); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
-    # take them out of reset later
-    raw_data[addr] = instb(RX0_CTRL, 40, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 39, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    # take them out of reset later    
+    raw_data[addr] = rx_ctrl(40, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1    
+    raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
+    raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
     # briefly signal that there's a new rate
-    raw_data[addr] = instb(RX0_CTRL, 40, 0xc000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 40, 0xc000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    raw_data[addr] = rx_ctrl(40, 1, 1, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
     # end the new rate flag (the buffers are not empty so no offset time is needed)
-    raw_data[addr] = instb(RX0_CTRL, 0, 0x8000 | cic0_decimation | (dds_demod_ch << 12) ); addr += 1 # decimation may not be needed here
-    raw_data[addr] = instb(RX1_CTRL, 0, 0x8000 | cic1_decimation | (dds_demod_ch << 12) ); addr += 1    
+    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 0, 0xb000 | cic_decimation); addr += 1    
     
     steps = 300
@@ -538,8 +563,7 @@ def long_loopback():
         raw_data[addr] = insta(IWAIT, sine_ts); addr += 1
     
     # end RX
-    raw_data[addr] = instb(RX0_CTRL, 1, 0x0000); addr += 1
-    raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
     
     # go idle
     raw_data[addr] = instb(TX0_I, 0, 0); addr += 1
@@ -579,7 +603,7 @@ if __name__ == "__main__":
 
         plt.show()
         
-    if False: # single shot loopback
+    if True: # single shot loopback
         
         # res = run_streaming_test(long_loopback())
         res = run_streaming_test(loopback())
@@ -600,7 +624,7 @@ if __name__ == "__main__":
 
         plt.show()
 
-    if True: # multiple trials, verify mean against saved
+    if False: # multiple trials, verify mean against saved
         verify_means = True
         save_means = False # If true, will overwrite reference data - use with care!
         
