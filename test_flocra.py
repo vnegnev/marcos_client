@@ -319,15 +319,12 @@ def rx_short():
     raw_data = raw_data[:addr] # truncate
     return raw_data
 
-def loopback():
+def loopback(cic0_decimation=7, cic1_decimation=10):
     lo_freq0 = 4 # MHz
     lo_freq1 = 4
     lo_freq2 = 1.5
     lo_freq3 = 1.5
     lo_amp = 100 # percent
-
-    cic0_decimation = 4
-    cic1_decimation = 7
     dds_demod_ch = 1
 
     extra_time = 20
@@ -373,22 +370,23 @@ def loopback():
     # Wait a bit, so that all buffers are emptied
     raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
 
-    ## NOTE: example of how to send arbitrary data to RX0 or RX1 CIC:
-    # first, set the output bus to the data you want to send (in this case, cic0_decimation)
-    raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
-    # next, strobe the 'bus 0 valid' line of the RX control buffer (no delays needed if it's not the Xilinx CIC)
-    raw_data[addr] = rx_ctrl(0, 1, 1, 1, 0, dds_demod_ch, dds_demod_ch); addr += 1
-    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
-    # same for channel 1:
-    raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
-    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 1, dds_demod_ch, dds_demod_ch); addr += 1
-    raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
-    # wait 100 cycles and reset both CICs, then wait 100 more and take them out of reset
-    raw_data[addr] = rx_ctrl(100, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
-    raw_data[addr] = rx_ctrl(100, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1    
+    if False:
+        ## NOTE: example of how to send arbitrary data to RX0 or RX1 CIC:
+        # first, set the output bus to the data you want to send (in this case, cic0_decimation)
+        raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
+        # next, strobe the 'bus 0 valid' line of the RX control buffer (no delays needed if it's not the Xilinx CIC)
+        raw_data[addr] = rx_ctrl(0, 1, 1, 1, 0, dds_demod_ch, dds_demod_ch); addr += 1
+        raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+        # same for channel 1:
+        raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
+        raw_data[addr] = rx_ctrl(0, 1, 1, 0, 1, dds_demod_ch, dds_demod_ch); addr += 1
+        raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+        # wait 100 cycles and reset both CICs, then wait 100 more and take them out of reset
+        raw_data[addr] = rx_ctrl(100, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+        raw_data[addr] = rx_ctrl(100, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1    
 
-    # Wait a bit, so that all buffers are emptied
-    raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
+        # Wait a bit, so that all buffers are emptied
+        raw_data[addr] = insta(IWAIT, 100); addr += 1 # max I value
     
     steps = 300
     pattern0 = np.hstack([ np.linspace(1, 0, steps//3), np.linspace(1, -1, steps//3), np.linspace(-1, 1, steps//3) ])
@@ -603,7 +601,7 @@ if __name__ == "__main__":
 
         plt.show()
         
-    if True: # single shot loopback
+    if False: # single shot loopback
         
         # res = run_streaming_test(long_loopback())
         res = run_streaming_test(loopback())
@@ -624,13 +622,16 @@ if __name__ == "__main__":
 
         plt.show()
 
-    if False: # multiple trials, verify mean against saved
+    if True: # multiple trials, verify mean against saved
         verify_means = True
         save_means = False # If true, will overwrite reference data - use with care!
         
         trials = 100
 
-        res = run_streaming_test(loopback())
+        cic0_decimation = 6
+        cic1_decimation = 11
+
+        res = run_streaming_test(loopback(cic0_decimation, cic1_decimation))
         rxd = res[4]['run_seq']
         rx0_pts = len(rxd['rx0_i'])
         rx1_pts = len(rxd['rx1_i'])
@@ -641,7 +642,7 @@ if __name__ == "__main__":
         rx1_q = np.zeros([trials, rx1_pts], dtype=np.int32)
         
         for k in range(trials):
-            res = run_streaming_test(loopback())
+            res = run_streaming_test(loopback(cic0_decimation, cic1_decimation))
             rxd = res[4]['run_seq']
             # offsets = 1e8
             offsets = 0
@@ -651,9 +652,8 @@ if __name__ == "__main__":
             rx1_q[k,:] = np.array(rxd['rx1_q'], dtype=np.int32)
 
         # plt.legend(['rx0_i', 'rx0_q', 'rx1_i', 'rx1_q'])
-
-        rx0_x = np.arange(rx0_pts)
-        rx1_x = np.arange(rx1_pts)
+        rx0_x = np.arange(rx0_pts) * cic0_decimation / fpga_clk_freq_MHz
+        rx1_x = np.arange(rx1_pts) * cic1_decimation / fpga_clk_freq_MHz
 
         props = {'alpha': 0.3}
         
@@ -663,12 +663,20 @@ if __name__ == "__main__":
         plt.fill_between(rx1_x, rx1_q.min(0), rx1_q.max(0), **props)
 
         rx0im, rx0qm, rx1im, rx1qm = rx0_i.mean(0), rx0_q.mean(0), rx1_i.mean(0), rx1_q.mean(0)
-        
+        rx0rms, rx1rms = np.sqrt(rx0im**2 + rx0qm**2), np.sqrt(rx1im**2 + rx1qm**2)
+
         plt.gca().set_prop_cycle(None)
+
         plt.plot(rx0_x, rx0im)
         plt.plot(rx0_x, rx0qm)
         plt.plot(rx1_x, rx1im)
         plt.plot(rx1_x, rx1qm)
+        
+        plt.plot(rx0_x, rx0rms)
+        plt.plot(rx1_x, rx1rms)
+
+        plt.xlabel('t (us)')
+        plt.legend(['rx0_i', 'rx0_q', 'rx1_i', 'rx1_q', 'rx0_rms', 'rx1_rms'])        
 
         if False:
             plt.plot(rx0_i.std(0))
@@ -679,15 +687,15 @@ if __name__ == "__main__":
         ## Verify data
         if verify_means:
             ref_data = np.load('ref_loopback.npz')
-            rx0imr, rx0qmr, rx1imr, rx1qmr = ref_data['rx0im'], ref_data['rx0qm'], ref_data['rx1im'], ref_data['rx1qm']
+            rx0rmsr, rx1rmsr = ref_data['rx0rms'], ref_data['rx1rms']
             # rx0im[10] *= 5 # deliberately stimulate error
-            for rx, rxr in zip([rx0im, rx0qm, rx1im, rx1qm], [rx0imr, rx0qmr, rx1imr, rx1qmr]):
+            for rx, rxr in zip([rx0rms, rx1rms], [rx0rmsr, rx1rmsr]):
                 diff = ((rx/rx.max() - rxr/rxr.max())**2).sum() / rx.size
                 if diff > 1e-5:
                     warnings.warn("Normalised loopback data is not as expected!")
 
         if save_means:
-            np.savez_compressed('ref_loopback.npz', rx0im=rx0im, rx0qm=rx0qm, rx1im=rx1im, rx1qm=rx1qm)
+            np.savez_compressed('ref_loopback.npz', rx0rms=rx0rms, rx1rms=rx1rms)
 
         plt.show()        
     
