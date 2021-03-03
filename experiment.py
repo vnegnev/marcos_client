@@ -57,7 +57,7 @@ class Experiment:
                  seq_dict=None,
                  seq_csv=None,
                  rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
-                 spi_freq=5, # MHz, best-effort -- default supports at least 100 ksps
+                 grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
                  local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
@@ -110,7 +110,7 @@ class Experiment:
             gradb_class = gb.OCRA1
         else:
             gradb_class = gb.GPAFHDO
-        self.gradb = gradb_class(self.server_command, spi_freq)
+        self.gradb = gradb_class(self.server_command, grad_max_update_rate)
 
         self._print_infos = print_infos
         self._assert_errors = assert_errors
@@ -160,7 +160,7 @@ class Experiment:
 
         def tx_complex(farr):
             """ farr: complex float array, [-1-1j, 1+1j] -- returns a tuple """
-            idata, qdata = farr.real(), farr.imag()
+            idata, qdata = farr.real, farr.imag
             return tx_real(idata), tx_real(qdata)
 
         for key, (times, vals) in seq_dict.items():
@@ -214,10 +214,14 @@ class Experiment:
                        'lo2_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[2]]) ),
                        'lo0_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
                        'lo1_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
-                       'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
-                       'rx0_lo': ( np.array([tstart]), np.array([self._rx_lo[0]]) ),
-                       'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ),
+                       'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) )
                        }
+
+        # LO source configuration (only set non-default values if necessary)
+        if self._rx_lo[0] != 0:
+            initial_cfg.update({ 'rx0_lo': ( np.array([tstart]), np.array([self._rx_lo[0]]) ) })
+        if self._rx_lo[1] != 0:            
+            initial_cfg.update({ 'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ) })
 
         for name, ic in initial_cfg.items():
             if name in self._seq.keys():

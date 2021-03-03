@@ -4,7 +4,17 @@
 # Functions should be fast, without any floating-point arithmetic -
 # that should be handled at a higher level.
 
-from local_config import grad_board
+class FloUserWarning(UserWarning):
+    pass
+
+class FloCompileWarning(FloUserWarning):
+    pass
+
+class FloGradWarning(FloUserWarning):
+    pass
+
+class FloServerWarning(FloUserWarning):
+    pass
 
 INOP = 0x0
 IFINISH = 0x1

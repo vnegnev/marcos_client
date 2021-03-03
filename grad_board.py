@@ -50,7 +50,6 @@ class OCRA1:
         self.spi_div = int(np.floor(1 / (spi_cycles_per_tx * max_update_rate * grad_clk_t))) - 1
         if self.spi_div > 63:
             self.spi_div = 63 # max value, < 100 ksps
-        self.grad_ser = 0x1 # select which board serialiser is activated on the firmware
 
         # bind function from Experiment class, or replace with something else for debugging
         self.server_command = server_command_f 
@@ -98,7 +97,16 @@ class OCRA1:
         # restore main grad ctrl word to respond to LSB or MSB changes
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (1 << 9)})        
 
-    def write_dac(self, channel, value):
+    def write_dac(self, channel, value, gated_writes=True):
+        """gated_writes: if the caller knows that flocra will already be set
+        to send data to the serialiser only on LSB updates, this can
+        be set to False. However if it's incorrectly set to False,
+        there may be spurious writes to the serialiser in direct mode
+        as the MSBs and LSBs are output by the buffers at different
+        times (for a timed flocra sequence, the buffers either update
+        simultaneously or only a single one updates at a time to save
+        instructions).
+        """        
         assert 0, "Not yet written, sorry!"
 
     def read_adc(self, channel, value):
@@ -119,43 +127,26 @@ class OCRA1:
 
 class GPAFHDO:
     def __init__(self,
-                 grad_t,
-                 grad_channels,
-                 server_command_f,                 
-                 spi_freq=None):
+                 server_command_f,
+                 max_update_rate=0.1):
+        """ max_update_rate is in MSPS for updates on a single channel; used to choose the SPI clock divider """
+        fhdo_max_update_rate = max_update_rate * 4 # single-channel serial, so needs to be faster
 
-        # assert False, "not yet implemented"
+        spi_cycles_per_tx = 30 # actually 24, but including some overhead
+        self.spi_div = int(np.floor(1 / (spi_cycles_per_tx * fhdo_max_update_rate * grad_clk_t))) - 1
+        if self.spi_div > 63:
+            self.spi_div = 63 # max value, < 100 ksps
+
+        # bind function from Experiment class, or replace with something else for debugging
+        self.server_command = server_command_f
+
+        # TODO: will this ever need modification?
+        self.grad_channels = 4 
         
-        # grad_clk_t = 0.007 # 7ns period
-        # self.true_grad_div = int(np.round(grad_t/grad_clk_t)) # true divider value
-        # self.grad_div = self.true_grad_div - 4 # what's sent to server
-        # self.grad_t = grad_clk_t * self.true_grad_div # gradient DAC update period
-        # self.grad_channels = grad_channels
-        # assert 0 < grad_channels < 5, "Strange number of grad channels"
-
-        # self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
-        # # initialize gpa fhdo calibration with ideal values
-        # self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-        # self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
-
-        # spi_cycles_per_tx = 30 # actually 24, but including some overhead
-        # if spi_freq is not None:
-        #     self.spi_div = int(np.floor(1 / (spi_freq*grad_clk_t))) - 1
-        # else:
-        #     # SPI must be written sequentially for each channel
-        #     self.true_spi_div = self.true_grad_div // spi_cycles_per_tx
-
-        #     if self.true_spi_div > 64:
-        #         self.true_spi_div = 64 # slowest SPI clock possible
-
-        # self.spi_div = self.true_spi_div - 1
-        # self.grad_ser = 0x2 # select which board serialiser is activated on the firmware
-
-        # if self.spi_div < 6:
-        #     warnings.warn('the fastest possible spi_div for GPA FHDO is 6 - check your settings!')
-
-        # # bind function from Experiment class, or replace with something else for debugging
-        # self.server_command = server_command_f
+        self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
+        # initialize gpa fhdo calibration with ideal values
+        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
 
         self.bin_config = {
             'initial_bufs': np.array([
@@ -183,19 +174,55 @@ class GPAFHDO:
             # TODO: set outputs to ~0
         ]
 
-        # configure grad ctrl divisors
-        self.server_command({'grad_div': (self.grad_div, self.spi_div), 'grad_ser': self.grad_ser})        
+        # configure main grad ctrl word first, in particular switch it to update the serialiser strobe only in response to LSB changes;
+        # gpa_fhdo_iface core has no reset, so no need to strobe it unlike for ocra1
+        # (flocra buffer address = 0, 8 MSBs of the 32-bit word)
+        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (0 << 9)})
 
         for iw in init_words:
-            # direct commands to grad board
-            self.server_command({'grad_dir': iw})
+            # direct commands to grad board; send MSBs then LSBs
+            self.server_command({'direct': 0x02000000 | (iw >> 16)})
+            self.server_command({'direct': 0x01000000 | (iw & 0xffff)})
 
-    def write_dac(self, channel, value):
-        self.server_command({'grad_dir': 0x00080000 | (channel<<16) | int(value)}) # DAC output
+        # restore main grad ctrl word to respond to LSB or MSB changes
+        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (1 << 9)})
+
+    def update_on_msb_writes(self, upd):
+        """upd: bool; set to True for default mode, False when direct writes
+        are being done"""
+        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (upd << 9)})
+
+    def write_dac(self, channel, value, gated_writes=True):
+        """gated_writes: if the caller knows that flocra will already be set
+        to send data to the serialiser only on LSB updates, this can
+        be set to False. However if it's incorrectly set to False,
+        there may be spurious writes to the serialiser in direct mode
+        as the MSBs and LSBs are output by the buffers at different
+        times (for a timed flocra sequence, the buffers either update
+        simultaneously or only a single one updates at a time to save
+        instructions).
+        """
+        if gated_writes:
+            update_on_msb_writes(True)
         
-    def read_adc(self, channel):
+        self.server_command({'direct': 0x02000000 | (0x0008 | channel) }) # MSBs
+        self.server_command({'direct': 0x01000000 | int(value) }) # MSBs
+        
+        # restore main grad ctrl word to respond to LSB or MSB changes
+        if gated_writes:
+            update_on_msb_writes(False)
+        
+    def read_adc(self, channel, gated_writes=True):
+        """ see write_dac docstring """
+        if gated_writes:
+            update_on_msb_writes(True)        
+        assert False, "TODO: CONTINUE HERE"
         self.server_command({'grad_dir': 0x40c00000 | (channel<<18)}) # ADC data transfer
         r, s = self.server_command({'grad_adc': 1}) # ADC data transfer
+
+        # restore main grad ctrl word to respond to LSB or MSB changes
+        if gated_writes:
+            update_on_msb_writes(False)        
         return r[4]['grad_adc']
 
     def expected_adc_code_from_dac_code(self, dac_code):
@@ -235,6 +262,8 @@ class GPAFHDO:
         performs a calibration of the gpa fhdo for every channel. The number of interpolation points in self.dac_values can
         be adapted to the accuracy needed.
         """
+        self.update_on_msb_writes(True)
+        
         self.gpa_current_per_volt = gpa_current_per_volt
         self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
         self.dac_values = self.dac_values.astype(int)
@@ -245,7 +274,7 @@ class GPAFHDO:
             adc_values = np.zeros([self.dac_values.size, averages]).astype(np.uint32)
             gpaCalRatios = np.zeros(self.dac_values.size)
             for k, dv in enumerate(self.dac_values):
-                self.write_dac(channel,dv)
+                self.write_dac(channel,dv, False)
                 time.sleep(settle_time) # wait 1ms to settle
                 
                 self.read_adc(channel) # dummy read
@@ -254,7 +283,7 @@ class GPAFHDO:
                 self.gpaCalValues[channel][k] = adc_values.sum(1)[k]/averages
                 gpaCalRatios[k] = self.gpaCalValues[channel][k]/self.expected_adc_code_from_dac_code(dv)
                 #print('Received ADC code {:d} -> expected ADC code {:d}'.format(int(adc_values.sum(1)[k]/averages),self.expected_adc_code_from_dac_code(dv)))
-            self.write_dac(channel,0x8000) # set gradient current back to 0
+            self.write_dac(channel,0x8000, False) # set gradient current back to 0
 
             if np.amax(gpaCalRatios) > 1.01 or np.amin(gpaCalRatios) < 0.99:
                 print('Calibration for channel {:d} seems to be incorrect. Calibration factor is {:f}. Make sure a gradient coil is connected and gpa_current_per_volt value is correct.'.format(channel,np.amax(gpaCalRatios)))
@@ -264,7 +293,10 @@ class GPAFHDO:
                 plt.plot(self.dac_values, adc_values.sum(1)/averages, 'b.')
                 plt.xlabel('DAC word'); plt.ylabel('ADC word, {:d} averages'.format(averages))
                 plt.grid(True)
-                plt.show()    
+                plt.show()
+
+        # housekeeping
+        self.update_on_msb_writes(True)
 
     def float2bin(self, grad_data):
         grad_bram_data = np.zeros(grad_data[0].size * self.grad_channels, dtype=np.uint32)

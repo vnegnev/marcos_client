@@ -212,7 +212,7 @@ def cl2bin(changelist, changelist_grad,
                 changelist_grad_shifted.append(c) 
         else:
             if t - t_last[idx] < 24 * (1 + spi_div) + 2: # 
-                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
+                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!", FloGradWarning)
             changelist_grad_shifted.append(c)
             t_last[idx] = t
             chgs = [0, 0]
@@ -245,7 +245,7 @@ def cl2bin(changelist, changelist_grad,
             buf_diff = (current_bufs[buf] ^ val) & mask
             assert buf_diff & change_masks[buf] == 0, "Tried to set a buffer to two values at once"
             if buf_diff == 0 and buf not in (1, 2): # not one of the gradient update buffers
-                warnings.warn("Instruction will have no effect. Skipping...")
+                warnings.warn("Instruction will have no effect. Skipping...", FloCompileWarning)
                 continue
             val_masked = val & mask
             old_val_unmasked = current_bufs[buf] & ~mask

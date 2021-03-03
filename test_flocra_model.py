@@ -205,6 +205,8 @@ class ModelTest(unittest.TestCase):
         os.system("make -j4 -s -C " + os.path.join(flocra_sim_path, "build"))
         os.system("fallocate -l 516KiB /tmp/marcos_server_mem")
         os.system("killall flocra_sim") # in case other instances were started earlier
+
+        warnings.simplefilter("ignore", fc.FloServerWarning)
     
     def setUp(self):
         # start simulation
@@ -536,13 +538,31 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_dict(d, "test_fhd_many", self.s, self.p, **fhd_config)        
         fc.grad_board = gb_orig
         self.assertEqual(refl, siml)
-
+        
     def test_single_expt(self):
         """ Basic state change on a single buffer. Experiment version"""
         d = {'tx0_i': (np.array([1]), np.array([0.5]))}
-        refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p,
-                                       rx_t=2)
+        expt_args = {'rx_t': 2, 'local_grad_board': 'ocra1'}
+        refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
+
+        # test for the GPA-FHDO too
+        self.tearDown(); self.setUp()
+        expt_args['local_grad_board'] = 'gpa-fhdo'
+        refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
+        self.assertEqual(refl, siml)
+
+    def test_four_par_expt_iq(self):
+        """ State change on four buffers in parallel. Experiment version using complex inputs"""
+        d = {'tx0': (np.array([1]), np.array([0.5+0.2j])), 'tx1': (np.array([1]), np.array([-0.3+1j]))}
+        expt_args = {'rx_t': 2, 'local_grad_board': 'ocra1'}
+        refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
+        self.assertEqual(refl, siml)
+
+        self.tearDown(); self.setUp()
+        expt_args['local_grad_board'] = 'gpa-fhdo'
+        refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
+        self.assertEqual(refl, siml)        
 
 if __name__ == "__main__":
     unittest.main()        
