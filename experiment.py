@@ -52,7 +52,7 @@ class Experiment:
     """
 
     def __init__(self,
-                 lo_freq, # MHz
+                 lo_freq=1, # MHz
                  rx_t=1, # us, best-effort 
                  seq_dict=None,
                  seq_csv=None,
@@ -68,7 +68,8 @@ class Experiment:
 
         # create socket early so that destructor works
         if prev_socket is None:
-            self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)            
+            self._s.connect( (ip_address, port) )
         else:
             self._s = prev_socket
         
@@ -99,9 +100,7 @@ class Experiment:
             self._csv = None
             self.replace_dict(seq_dict)
         else:
-            self._csv = seq_csv # None unless a CSV was supplied
-            
-        self._s.connect( (ip_address, port) )
+            self._csv = seq_csv # None unless a CSV was supplied            
         
         if local_grad_board == "auto":
             local_grad_board = grad_board
@@ -181,10 +180,13 @@ class Experiment:
                 keybin = key,
                 # binary-valued data
                 valbin = vals.astype(np.int32),
-                assert np.all( (0 <= valbin) & (valbin <= 1) ), "Binary columns must be [0,1] or [False, True] valued"
+                for vb in valbin:
+                    assert np.all( (0 <= vb) & (vb <= 1) ), "Binary columns must be [0,1] or [False, True] valued"
             elif key in ['leds']:
                 keybin = key,
                 valbin = vals.astype(np.uint8), # 8-bit value
+            else:
+                warnings.warn("Unknown flocra experiment dictionary key: " + key)
 
             for k, v in zip(keybin, valbin):
                 self._seq[k] = (tbin, v)
@@ -216,8 +218,15 @@ class Experiment:
                        'rx0_lo': ( np.array([tstart]), np.array([self._rx_lo[0]]) ),
                        'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ),
                        }
-        
-        self._seq.update(initial_cfg)
+
+        for name, ic in initial_cfg.items():
+            if name in self._seq.keys():
+                a, b = self._seq[name]
+                self._seq[name] = ( np.append(a, ic[0]), np.append(b, ic[1]) )
+            else:
+                self._seq[name] = ic
+            
+        # self._seq.update(initial_cfg)
         self._binseq = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
@@ -231,15 +240,20 @@ class Experiment:
             self.compile()
         
         rx_data, msgs = sc.command({'run_seq': self._binseq.tobytes()}, self._s)
-        st()
+
+        # Auto-close server if it's simulating
+        # if sc.command({'are_you_real':0}, self._s)[0][4]['are_you_real'] == "simulation":
+        #     sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), self._s)
         
-        return np.frombuffer(reply[4]['acq'], np.complex64), status
+        return rx_data, msgs
 
 def test_Experiment():
-    sd = {'tx0_i': ( np.array([1,2,10]), np.array([-0.5, 0.5, 0.9]) )}
+    sd = {'tx0_i': ( np.array([1,2,10]), np.array([-0.5, 0.5, 0.9]) ),
+          'tx0_q': ( np.array([1.5, 2.5, 9]), np.array([-0.9, -0.4, 0.6]) ),
+          'rx0_rst_n': (np.array([0.5, 10.5]), np.array([1, 0]) ),
+          'rx1_rst_n': (np.array([0.5, 10.5]), np.array([1, 0]) )}
     exp = Experiment(lo_freq=1, seq_dict=sd)
     exp.run()
-    st()
     
     # # first TX segment
     # t = np.linspace(0, 100, 1001) # goes to 100us, samples every 100ns

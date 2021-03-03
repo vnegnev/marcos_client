@@ -76,7 +76,7 @@ def col2buf(col_idx, value):
         val = value << 15,
         mask = 0x8000,
     elif col_idx in (29, 30): # LO source for RX demodulation
-        buf_idx = 16 # RX_CTRL
+        buf_idx = 16, # RX_CTRL
         bit_idx = (col_idx - 29) * 2
         val = value << bit_idx,
         mask = 0x0003 << bit_idx,
@@ -153,10 +153,7 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
     for k, vals in sd.items(): # iterate over dictionary keys
         col_idx = col_arr.index(k)
         buf_idces, values, masks = col2buf(col_idx, vals[1]) # single element or array of values
-        try:
-            t_corr = vals[0] - latencies[buf_idces[0]]
-        except IndexError:
-            st()
+        t_corr = vals[0] - latencies[buf_idces[0]]
         for bi, vv, m in zip(buf_idces, values, masks):
             for t, v in zip(t_corr, vv):
                 change = t, bi, v, m

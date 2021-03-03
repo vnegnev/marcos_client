@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import server_comms as sc
 
 import flocompile as fc
+import experiment as exp
 
 import pdb
 st = pdb.set_trace
@@ -143,6 +144,51 @@ def compare_dict(source_dict, ref_fname, sock, proc,
         with open(flocra_sim_csv, "r") as sim:
             siml = sim.read().splitlines()
         return refl, siml
+
+def compare_expt_dict(source_dict, ref_fname, sock, proc,
+                      # initial_bufs=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint16),
+                      # latencies=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint32),
+                      ignore_start_delay=True,
+                      **kwargs):
+    """Arguments the same as for compare_dict(), except that the source
+    dictionary is in floating-point units, and the kwargs are passed
+    to the Experiment class constructor. Note that the initial_bufs
+    and latencies are supplied to the Experiment class from the
+    classes in grad_board.py.
+    """
+
+    e = exp.Experiment(prev_socket=sock, seq_dict=source_dict, **kwargs)
+
+    # run simulation
+    rx_data, msgs = e.run()
+
+    # halt simulation
+    sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), sock)
+    sock.close()
+    proc.wait(1) # wait a short time for simulator to close
+
+    ref_csv = os.path.join("csvs", ref_fname + ".csv")
+    with open(ref_csv, "r") as ref:
+        refl = ref.read().splitlines()
+    with open(flocra_sim_csv, "r") as sim:
+        siml = sim.read().splitlines()
+    # return refl, siml
+
+    ref_csv = os.path.join("csvs", ref_fname + ".csv")    
+    if ignore_start_delay:
+        rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
+        sdata = np.loadtxt(flocra_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
+
+        rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
+        sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
+
+        return rdata.tolist(), sdata.tolist()
+    else:
+        with open(ref_csv, "r") as ref:
+            refl = ref.read().splitlines()
+        with open(flocra_sim_csv, "r") as sim:
+            siml = sim.read().splitlines()
+        return refl, siml    
 
 class ModelTest(unittest.TestCase):
     """Main test class for general HDL and compiler development/debugging;
@@ -491,8 +537,12 @@ class ModelTest(unittest.TestCase):
         fc.grad_board = gb_orig
         self.assertEqual(refl, siml)
 
-if __name__ == "__main__":
-    unittest.main()        
+    def test_single_expt(self):
+        """ Basic state change on a single buffer. Experiment version"""
+        d = {'tx0_i': (np.array([1]), np.array([0.5]))}
+        refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p,
+                                       rx_t=2)
+        self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
-    unittest.main()
+    unittest.main()        

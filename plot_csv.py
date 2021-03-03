@@ -25,9 +25,9 @@ if __name__ == "__main__":
     data[1:, 0] = data[1:, 0] - data[1, 0] + 1 # remove dead time in the beginning taken up by simulated memory writes
     
     time_us = data[:,0]/122.88
-    tx = data[:,1:5].astype(np.int16)
-    fhdo = data[:,5:9].astype(np.int16)
-    ocra1 = ( (data[:,9:13].astype(np.int32) ^ (1 << 17)) - (1 << 17) ).astype(np.int32)    
+    tx = data[:,1:5].astype(np.int16) / 32768
+    fhdo = data[:,5:9].astype(np.int16) / 32768
+    ocra1 = ( (data[:,9:13].astype(np.int32) ^ (1 << 17)) - (1 << 17) ).astype(np.int32) / 131072
     rx = data[:,14:19].astype(np.uint8)
     rx_en = rx[:, 4:] # ignore the rate logic, only plot the RX enables
     io = data[:,19:].astype(np.uint8)    
@@ -36,6 +36,7 @@ if __name__ == "__main__":
 
     txs.step(time_us, tx, where='post')
     txs.legend(['tx0 i', 'tx0 q', 'tx1 i', 'tx1 q'])
+    txs.grid(True)
 
     if grad_board == "ocra1":
         gdata = ocra1
