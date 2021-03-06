@@ -172,9 +172,11 @@ class Experiment:
             elif key in ['tx0', 'tx1']:
                 valbin = tx_complex(vals)
                 keybin = key + '_i', key + '_q'
-            elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2', 'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2']:
+            elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2',
+                         'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
+                         'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2']:
                 # flocompile will figure out whether the key matches the selected grad board
-                keybin = key,
+                keybin = self.gradb.key_convert(key),
                 valbin = self.gradb.float2bin(vals),
             elif key in ['rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out']:
                 keybin = key,

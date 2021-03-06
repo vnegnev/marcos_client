@@ -562,7 +562,17 @@ class ModelTest(unittest.TestCase):
         self.tearDown(); self.setUp()
         expt_args['local_grad_board'] = 'gpa-fhdo'
         refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
+
+    def test_uneven_sparse_ocra1_expt(self):
+        """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
+        d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
+             'tx1': (np.array([5,20,  50,70,  110,125]), np.array([-1j,0,  -0.5j,0,  0.5+0.3j,0])),
+
+             'grad_vx': (np.array([ 5, 30, 43, 50, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vy': (np.array([10, 23, 43, 57, 84]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vz': (np.array([10, 23,     65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vz': (np.array([10,     43, 65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),             
 
 if __name__ == "__main__":
     unittest.main()        
