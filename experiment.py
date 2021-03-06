@@ -6,13 +6,15 @@ import socket, time, warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-import pdb
-st = pdb.set_trace
-
 from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 import grad_board as gb
 import server_comms as sc
 import flocompile as fc
+
+import pdb
+st = pdb.set_trace
+
+######## TODO: configure the final buffers as well, whether in flocompile or elsewhere
 
 class Experiment:
     """Wrapper class for managing an entire experimental sequence 
@@ -228,9 +230,8 @@ class Experiment:
                 self._seq[name] = ( np.append(a, ic[0]), np.append(b, ic[1]) )
             else:
                 self._seq[name] = ic
-            
-        # self._seq.update(initial_cfg)
-        self._binseq = np.array( fc.dict2bin(self._seq,
+        
+        self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
                                              ), dtype=np.uint32 )
@@ -242,7 +243,7 @@ class Experiment:
         if self._seq_compiled is False:
             self.compile()
         
-        rx_data, msgs = sc.command({'run_seq': self._binseq.tobytes()}, self._s)
+        rx_data, msgs = sc.command({'run_seq': self._machine_code.tobytes()}, self._s)
 
         # Auto-close server if it's simulating
         # if sc.command({'are_you_real':0}, self._s)[0][4]['are_you_real'] == "simulation":

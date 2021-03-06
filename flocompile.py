@@ -245,8 +245,12 @@ def cl2bin(changelist, changelist_grad,
                 current_time = time
             buf_diff = (current_bufs[buf] ^ val) & mask
             assert buf_diff & change_masks[buf] == 0, "Tried to set a buffer to two values at once"
-            if buf_diff == 0 and buf not in (1, 2): # not one of the gradient update buffers
-                warnings.warn("Instruction will have no effect. Skipping...", FloCompileWarning)
+            if buf_diff == 0:
+                if buf not in (1, 2):
+                    # gradient buffers will have unneeded instructions
+                    # all the time, so not worth warning the user for
+                    # those
+                    warnings.warn("Instruction will have no effect. Skipping...", FloRemovedInstructionWarning)
                 continue
             val_masked = val & mask
             old_val_unmasked = current_bufs[buf] & ~mask

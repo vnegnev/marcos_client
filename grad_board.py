@@ -39,6 +39,9 @@ import time
 import matplotlib.pyplot as plt
 import local_config as lc
 
+import pdb
+st = pdb.set_trace
+
 grad_clk_t = 1/lc.fpga_clk_freq_MHz # ~8.14ns period for RP-122
 
 class OCRA1:
@@ -126,7 +129,7 @@ class OCRA1:
     def float2bin(self, grad_data, channel=0):
         cv = self.cal_values[channel]
         gd_cal = grad_data * cv[0] + cv[1] # calibration
-        return np.round(131071 * gd_cal).astype(np.uint32) & 0x3ffff # 2's complement
+        return np.round(131071.49 * gd_cal).astype(np.uint32) & 0x3ffff # 2's complement
 
 class GPAFHDO:
     def __init__(self,
@@ -148,8 +151,10 @@ class GPAFHDO:
         
         self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
         # initialize gpa fhdo calibration with ideal values
-        self.dac_values = np.array([0x7000, 0x8000, 0x9000])
-        self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
+        # self.dac_values = np.array([0x7000, 0x8000, 0x9000])
+        # self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
+        self.dac_values = np.array([0x0, 0xffff])
+        self.gpaCalValues = np.tile(self.expected_adc_code_from_dac_code(self.dac_values), (self.grad_channels, 1))
 
         self.bin_config = {
             'initial_bufs': np.array([
@@ -233,13 +238,13 @@ class GPAFHDO:
         a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
         The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
         """
-        dac_voltage = 5 * dac_code / 0xffff
+        dac_voltage = 5 * (dac_code / 0xffff)
         v_ref = 2.5
         gpa_current = (dac_voltage-v_ref) * self.gpa_current_per_volt
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
-        adc_code = np.round(adc_voltage/adc_gain * 0xffff).astype(np.int)
+        adc_code = np.round(adc_voltage/adc_gain * 0xffff).astype(np.uint16)
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
 
@@ -247,7 +252,7 @@ class GPAFHDO:
         """
         calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
         """
-        return np.interp(self.expected_adc_code_from_dac_code(dac_code),self.gpaCalValues[channel],self.dac_values).astype(np.uint32)
+        return np.round( np.interp(self.expected_adc_code_from_dac_code(dac_code), self.gpaCalValues[channel], self.dac_values) ).astype(np.uint32)
 
     def ampere_to_dac_code(self, ampere):
         v_ref = 2.5
@@ -309,8 +314,8 @@ class GPAFHDO:
 
     def float2bin(self, grad_data, channel=0):
         # Not 2's complement - 0x0 word is ~0V (-10A), 0xffff is ~+5V (+10A)
-        gr_dacbits = np.round(32767.49 * (grad_data + 1)).astype(np.uint32) & 0xffff
-        gr_dacbits_cal = self.calculate_corrected_dac_code(channel,gr_dacbits)                            
+        gr_dacbits = np.round(32767.49 * (grad_data + 1)).astype(np.uint16)
+        gr_dacbits_cal = self.calculate_corrected_dac_code(channel,gr_dacbits)
         gr = gr_dacbits_cal | 0x80000 | (channel << 16)
 
         # # always broadcast for the final channel (TODO: probably not needed for GPA-FHDO, check then remove)

@@ -10,6 +10,9 @@ class FloUserWarning(UserWarning):
 class FloCompileWarning(FloUserWarning):
     pass
 
+class FloRemovedInstructionWarning(FloCompileWarning):
+    pass
+
 class FloGradWarning(FloUserWarning):
     pass
 
