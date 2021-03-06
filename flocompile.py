@@ -28,12 +28,13 @@ def col2buf(col_idx, value):
         # timing and broadcast logic will be handled at the next stage
         if grad_board == "gpa-fhdo":
             if col_idx in (9, 10, 11, 12):
-                raise RuntimeError("GPA-FHDO is selected, but CSV is trying to control OCRA1")
+                raise RuntimeError("GPA-FHDO is selected, but you are trying to control OCRA1")
             grad_chan = col_idx - 5
             val_full = value | 0x80000 | ( grad_chan << 16 ) | (grad_chan << 25)
         elif grad_board == "ocra1":
             if col_idx in (5, 6, 7, 8):
-                raise RuntimeError("OCRA1 is selected, but CSV is trying to control GPA-FHDO")
+                st()
+                raise RuntimeError("OCRA1 is selected, but you are trying to control GPA-FHDO")
             grad_chan = col_idx - 9                
             val_full = value << 2 | 0x00100000 | (grad_chan << 25) | 0x01000000 # always broadcast by default
         else:
@@ -211,7 +212,7 @@ def cl2bin(changelist, changelist_grad,
                 # time for GPA-FHDO
                 changelist_grad_shifted.append(c) 
         else:
-            if t - t_last[idx] < 24 * (1 + spi_div) + 2: # 
+            if t - t_last[idx] < 24 * (1 + spi_div) + 2: #
                 warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!", FloGradWarning)
             changelist_grad_shifted.append(c)
             t_last[idx] = t

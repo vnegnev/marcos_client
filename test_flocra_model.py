@@ -69,6 +69,23 @@ oc1_config = {
         0, 0 # gates and LEDs, RX config
     ], dtype=np.uint16)}
 
+gb_orig = None
+gb_changed = False
+
+def set_grad_board(gb):
+    global gb_orig, gb_changed
+    if not gb_changed:
+        gb_orig = fc.grad_board
+    fc.grad_board = gb
+    exp.grad_board = gb
+    gb_changed = True
+
+def restore_grad_board():
+    global gb_orig, gb_changed    
+    fc.grad_board = gb_orig
+    exp.grad_board = gb_orig
+    gb_changed = False
+
 def compare_csv(fname, sock, proc,
                  initial_bufs=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint16),
                  latencies=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint32),
@@ -353,35 +370,31 @@ class ModelTest(unittest.TestCase):
     def test_fhd_single(self):
         """Single state change on GPA-FHDO x gradient output, default SPI
         clock divisor; simultaneous change on TX0i"""
-        gb_orig = fc.grad_board
-        fc.grad_board = "gpa-fhdo"
-        refl, siml = compare_csv("test_fhd_single", self.s, self.p, **fhd_config)        
-        fc.grad_board = gb_orig
+        set_grad_board("gpa-fhdo")
+        refl, siml = compare_csv("test_fhd_single", self.s, self.p, **fhd_config)
+        restore_grad_board()
         self.assertEqual(refl, siml)
         
     def test_fhd_series(self):
         """Series of state changes on GPA-FHDO x gradient output, default SPI
         clock divisor """
-        gb_orig = fc.grad_board
-        fc.grad_board = "gpa-fhdo"
-        refl, siml = compare_csv("test_fhd_series", self.s, self.p, **fhd_config)        
-        fc.grad_board = gb_orig
+        set_grad_board("gpa-fhdo")
+        refl, siml = compare_csv("test_fhd_series", self.s, self.p, **fhd_config)
+        restore_grad_board()
         self.assertEqual(refl, siml)
         
     def test_fhd_multiple(self):
         """A few state changes on GPA-FHDO gradient outputs, default SPI clock divisor"""
-        gb_orig = fc.grad_board
-        fc.grad_board = "gpa-fhdo"
-        refl, siml = compare_csv("test_fhd_multiple", self.s, self.p, **fhd_config)        
-        fc.grad_board = gb_orig
+        set_grad_board("gpa-fhdo")
+        refl, siml = compare_csv("test_fhd_multiple", self.s, self.p, **fhd_config)
+        restore_grad_board()
         self.assertEqual(refl, siml)
 
     def test_fhd_many(self):
         """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes"""
-        gb_orig = fc.grad_board
-        fc.grad_board = "gpa-fhdo"
-        refl, siml = compare_csv("test_fhd_many", self.s, self.p, **fhd_config)        
-        fc.grad_board = gb_orig
+        set_grad_board("gpa-fhdo")
+        refl, siml = compare_csv("test_fhd_many", self.s, self.p, **fhd_config)
+        restore_grad_board()
         self.assertEqual(refl, siml)
         
     def test_fhd_too_fast(self):
@@ -389,8 +402,7 @@ class ModelTest(unittest.TestCase):
         divisor - too fast for the divider, second state change won't
         be applied and server should notice the error
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "gpa-fhdo"
+        set_grad_board("gpa-fhdo")
         
         # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
         with self.assertWarns( RuntimeWarning, msg="expected gpa-fhdo error not observed") as cmr:
@@ -400,7 +412,7 @@ class ModelTest(unittest.TestCase):
             self.setUp()
             refl, siml = compare_csv("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
             
-        fc.grad_board = gb_orig
+        restore_grad_board()
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
         self.assertEqual( str(cmr.warning) , "ERROR: gpa-fhdo gradient error; possibly missing samples")
@@ -410,50 +422,45 @@ class ModelTest(unittest.TestCase):
         """Single state change on ocra1 x gradient output, default SPI clock
         divisor; simultaneous change on TX0i
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "ocra1"
+        set_grad_board("ocra1")
         refl, siml = compare_csv("test_oc1_single", self.s, self.p, **oc1_config)
-        fc.grad_board = gb_orig
+        restore_grad_board()
         self.assertEqual(refl, siml)
 
     def test_oc1_series(self):
         """Series of state changes on ocra1 x gradient output, default SPI
         clock divisor
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "ocra1"
-        refl, siml = compare_csv("test_oc1_series", self.s, self.p, **oc1_config)
-        fc.grad_board = gb_orig
+        set_grad_board("ocra1")
+        refl, siml = compare_csv("test_oc1_series", self.s, self.p, **oc1_config) 
+        restore_grad_board()
         self.assertEqual(refl, siml)        
 
     def test_oc1_two(self):
         """Two sets of simultaneous state changes on ocra1 gradient outputs,
         default SPI clock divisor
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "ocra1"
+        set_grad_board("ocra1")
         refl, siml = compare_csv("test_oc1_two", self.s, self.p, **oc1_config)
-        fc.grad_board = gb_orig
+        restore_grad_board()
         self.assertEqual(refl, siml)        
 
     def test_oc1_four(self):
         """Four simultaneous state changes on ocra1 gradient outputs, default
         SPI clock divisor
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "ocra1"
+        set_grad_board("ocra1")
         refl, siml = compare_csv("test_oc1_four", self.s, self.p, **oc1_config)
-        fc.grad_board = gb_orig
+        restore_grad_board()
         self.assertEqual(refl, siml)
 
     def test_oc1_many(self):
         """Multiple simultaneous state changes on ocra1 gradient outputs, default
         SPI clock divisor
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "ocra1"
+        set_grad_board("ocra1")
         refl, siml = compare_csv("test_oc1_many", self.s, self.p, **oc1_config)
-        fc.grad_board = gb_orig
+        restore_grad_board()
         self.assertEqual(refl, siml)
         
     def test_oc1_too_fast(self):
@@ -461,8 +468,7 @@ class ModelTest(unittest.TestCase):
         divisor - too fast for the divider, second state change won't
         be applied and server should notice the error
         """
-        gb_orig = fc.grad_board
-        fc.grad_board = "ocra1"
+        set_grad_board("ocra1")
         
         # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
         with self.assertWarns( RuntimeWarning, msg="expected ocra1 error not observed") as cmr:
@@ -471,8 +477,7 @@ class ModelTest(unittest.TestCase):
             self.tearDown()
             self.setUp()
             refl, siml = compare_csv("test_oc1_too_fast", self.s, self.p, self_ref=False, **oc1_config)
-            
-        fc.grad_board = gb_orig
+            restore_grad_board()
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
         self.assertEqual( str(cmr.warning) , "ERROR: ocra1 gradient error; possibly missing samples")
@@ -525,8 +530,7 @@ class ModelTest(unittest.TestCase):
 
     def test_fhd_many_dict(self):
         """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes. Dict version"""
-        gb_orig = fc.grad_board
-        fc.grad_board = "gpa-fhdo"
+        set_grad_board("gpa-fhdo")
         d = {'tx0_i': (np.array([600, 1800]), np.array([1, 65532])),
              'tx0_q': (np.array([900, 2100]), np.array([2, 65533])),
              'tx1_i': (np.array([1200, 2400]), np.array([3, 65534])),
@@ -535,36 +539,65 @@ class ModelTest(unittest.TestCase):
              'fhdo_vy': (np.array([900, 2100]), np.array([2, 65533])),
              'fhdo_vz': (np.array([1200, 2400]), np.array([3, 65534])),
              'fhdo_vz2': (np.array([1500, 2700]), np.array([4, 65535]))}
-        refl, siml = compare_dict(d, "test_fhd_many", self.s, self.p, **fhd_config)        
-        fc.grad_board = gb_orig
+        refl, siml = compare_dict(d, "test_fhd_many", self.s, self.p, **fhd_config)
+        restore_grad_board()
         self.assertEqual(refl, siml)
+
+    def test_oc1_many_dict(self):
+        """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes. Dict version"""
+        set_grad_board("ocra1")
+        d = {'tx0_i': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([1, 5, 9, 13, 65535, 65534, 10000, 20000])),
+             'tx0_q': (np.array([600, 1200, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([2, 10, 14, 2, 65533, 12000, 25000])),
+             'tx1_i': (np.array([600, 900, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([3, 7, 15, 3, 65532, 14000, 30000])),
+             'tx1_q': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([4, 8, 12, 16, 4, 65531, 16000, 35000])),
+             
+             'ocra1_vx': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([1, 5, 9, 13, 262143, 262142, 100000, 20000])),
+             'ocra1_vy': (np.array([600, 1200, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([2, 10, 14, 2, 262141, 120000, 25000])),
+             'ocra1_vz': (np.array([600, 900, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([3, 7, 15, 3, 262140, 140000, 30000])),
+             'ocra1_vz2': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
+                          np.array([4, 8, 12, 16, 4, 262139, 160000, 35000])),
+             }
+        refl, siml = compare_dict(d, "test_oc1_many", self.s, self.p, **oc1_config)
+        restore_grad_board()
+        self.assertEqual(refl, siml)        
         
     def test_single_expt(self):
         """ Basic state change on a single buffer. Experiment version"""
+        set_grad_board("gpa-fhdo")
         d = {'tx0_i': (np.array([1]), np.array([0.5]))}
-        expt_args = {'rx_t': 2, 'local_grad_board': 'ocra1'}
+        expt_args = {'rx_t': 2}
         refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
 
-        # test for the GPA-FHDO too
+        # test for the other grad board
         self.tearDown(); self.setUp()
-        expt_args['local_grad_board'] = 'gpa-fhdo'
+        set_grad_board("ocra1")
         refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
+        restore_grad_board()
         self.assertEqual(refl, siml)
 
     def test_four_par_expt_iq(self):
         """ State change on four buffers in parallel. Experiment version using complex inputs"""
         d = {'tx0': (np.array([1]), np.array([0.5+0.2j])), 'tx1': (np.array([1]), np.array([-0.3+1j]))}
-        expt_args = {'rx_t': 2, 'local_grad_board': 'ocra1'}
+        expt_args = {'rx_t': 2}
+        set_grad_board("gpa-fhdo")
         refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
 
         self.tearDown(); self.setUp()
-        expt_args['local_grad_board'] = 'gpa-fhdo'
+        set_grad_board("ocra1")
         refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
+        restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_uneven_sparse_ocra1_expt(self):
+    def test_uneven_sparse_expt_oc1(self):
         """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
         d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
              'tx1': (np.array([5,20,  50,70,  110,125]), np.array([-1j,0,  -0.5j,0,  0.5+0.3j,0])),
@@ -572,7 +605,17 @@ class ModelTest(unittest.TestCase):
              'grad_vx': (np.array([ 5, 30, 43, 50, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
              'grad_vy': (np.array([10, 23, 43, 57, 84]), np.array([-1, 1, 0.5, -0.5, 0])),
              'grad_vz': (np.array([10, 23,     65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
-             'grad_vz': (np.array([10,     43, 65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),             
+             'grad_vz2': (np.array([10,     43, 65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
+
+             'rx0_rst_n': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
+             'rx1_rst_n': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
+             }
+
+        set_grad_board("ocra1")
+        expt_args = {'rx_t': 0.5}
+        refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_oc1", self.s, self.p, **expt_args)
+        restore_grad_board()
+        self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
     unittest.main()        

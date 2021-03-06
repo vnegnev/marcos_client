@@ -30,6 +30,7 @@
 # desired calibrations/transforms internally.
 #
 # key_convert() to convert from the user-facing dictionary key labels
+# to gradient board-specific labels, and also return a channel
 #
 # TODO: actually use class inheritance here, instead of two separate classes
 
@@ -119,10 +120,12 @@ class OCRA1:
     def key_convert(self, user_key):
         # convert key from user-facing dictionary to flocompile format
         vstr = user_key.split('_')[1]
-        return "ocra1_" + vstr
+        ch_list = ['vx', 'vy', 'vz', 'vz2']
+        return "ocra1_" + vstr, ch_list.index(vstr)
 
-    def float2bin(self, grad_data):
-        gd_cal = gd * cv[0] + cv[1] # calibration
+    def float2bin(self, grad_data, channel=0):
+        cv = self.cal_values[channel]
+        gd_cal = grad_data * cv[0] + cv[1] # calibration
         return np.round(131071 * gd_cal).astype(np.uint32) & 0x3ffff # 2's complement
 
 class GPAFHDO:
@@ -298,18 +301,19 @@ class GPAFHDO:
         # housekeeping
         self.update_on_msb_writes(True)
 
-    def float2bin(self, grad_data):
-        grad_bram_data = np.zeros(grad_data[0].size * self.grad_channels, dtype=np.uint32)
+    def key_convert(self, user_key):
+        # convert key from user-facing dictionary to flocompile format
+        vstr = user_key.split('_')[1]
+        ch_list = ['vx', 'vy', 'vz', 'vz2']
+        return "fhdo_" + vstr, ch_list.index(vstr)        
 
-        for ch, gd in enumerate(grad_data):
-            # Not 2's complement - 0x0 word is ~0V (-10A), 0xffff is ~+5V (+10A)
-            gr_dacbits = np.round(32767.49 * (gd + 1)).astype(np.uint32) & 0xffff
-            gr_dacbits_cal = self.calculate_corrected_dac_code(ch,gr_dacbits)                            
-            gr = gr_dacbits_cal | 0x80000 | (ch << 16)
-            
-            # always broadcast for the final channel (TODO: probably not needed for GPA-FHDO, check then remove)
-            broadcast = ch == self.grad_channels - 1                
+    def float2bin(self, grad_data, channel=0):
+        # Not 2's complement - 0x0 word is ~0V (-10A), 0xffff is ~+5V (+10A)
+        gr_dacbits = np.round(32767.49 * (grad_data + 1)).astype(np.uint32) & 0xffff
+        gr_dacbits_cal = self.calculate_corrected_dac_code(channel,gr_dacbits)                            
+        gr = gr_dacbits_cal | 0x80000 | (channel << 16)
 
-            grad_bram_data[ch::self.grad_channels] = gr | (ch << 25) | (broadcast << 24) # interleave data
-
-        return grad_bram_data
+        # # always broadcast for the final channel (TODO: probably not needed for GPA-FHDO, check then remove)
+        # broadcast = channel == self.grad_channels - 1
+        # grad_bram_data[channel::self.grad_channels] = gr | (channel << 25) | (broadcast << 24) # interleave data
+        return gr | (channel << 25) # extra channel word for gpa_fhdo_iface, not sure if it's currently used

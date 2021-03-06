@@ -36,12 +36,11 @@ class Experiment:
 
     OPTIONAL PARAMETERS - ONLY ALTER IF YOU KNOW WHAT YOU'RE DOING
 
-    spi_freq: frequency to run the gradient SPI interface at - must be
-    high enough to support your maximum gradient sample rate but not
-    so high that you experience communication issues. Leave this alone
-    unless you know what you're doing.
-
-    local_grad_board: override local_config.py setting
+    grad_max_update_rate: used to calculate the frequency to run the
+    gradient SPI interface at - must be high enough to support your
+    maximum gradient sample rate but not so high that you experience
+    communication issues. Leave this alone unless you know what you're
+    doing.
 
     print_infos: print debugging messages from server to stdout
 
@@ -49,6 +48,7 @@ class Experiment:
     exceptions by the class, halting the program
 
     init_gpa: initialise the GPA during the construction of this class
+
     """
 
     def __init__(self,
@@ -57,8 +57,7 @@ class Experiment:
                  seq_dict=None,
                  seq_csv=None,
                  rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
-                 grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
-                 local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
+                 grad_max_update_rate=0.25, # MSPS, across all channels in parallel, best-effort
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
@@ -95,6 +94,13 @@ class Experiment:
 
         self._initial_wait = initial_wait
 
+        assert grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
+        if grad_board == 'ocra1':
+            gradb_class = gb.OCRA1
+        else:
+            gradb_class = gb.GPAFHDO
+        self.gradb = gradb_class(self.server_command, grad_max_update_rate)        
+
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
         if seq_dict is not None:
             self._csv = None
@@ -102,16 +108,6 @@ class Experiment:
         else:
             self._csv = seq_csv # None unless a CSV was supplied            
         
-        if local_grad_board == "auto":
-            local_grad_board = grad_board
-            
-        assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
-        if local_grad_board == 'ocra1':
-            gradb_class = gb.OCRA1
-        else:
-            gradb_class = gb.GPAFHDO
-        self.gradb = gradb_class(self.server_command, grad_max_update_rate)
-
         self._print_infos = print_infos
         self._assert_errors = assert_errors
 
@@ -176,8 +172,9 @@ class Experiment:
                          'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
                          'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2']:
                 # flocompile will figure out whether the key matches the selected grad board
-                keybin = self.gradb.key_convert(key),
-                valbin = self.gradb.float2bin(vals),
+                keyb, channel = self.gradb.key_convert(key)
+                keybin = keyb, # tuple
+                valbin = self.gradb.float2bin(vals, channel),
             elif key in ['rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out']:
                 keybin = key,
                 # binary-valued data
