@@ -598,7 +598,6 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    @unittest.skip('still debugging')
     def test_uneven_sparse_expt_fhd(self):
         """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
         d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
@@ -610,8 +609,8 @@ class ModelTest(unittest.TestCase):
              # update (on any channel) may only occur 4us later
              'grad_vx': (np.array([ 10, 30, 54, 75, 100]), np.array([-1, 1, 0.5, -0.5, 0])),
              'grad_vy': (np.array([ 14, 26, 50, 71,  96]), np.array([-1, 1, 0.5, -0.5, 0])),
-             'grad_vz': (np.array([ 6,  22,     79,  88]), np.array([-1, 1, 0.5, -0.5, 0])),
-             'grad_vz2': (np.array([18,     46, 67,  92]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vz': (np.array([ 6,  22,     79,  88]), np.array([-1, 1,       0.5, 0])),
+             'grad_vz2': (np.array([18,     46, 67,  92]), np.array([-1,      1,  0.5, 0])),
 
              'rx0_rst_n': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
              'rx1_rst_n': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
@@ -619,6 +618,7 @@ class ModelTest(unittest.TestCase):
 
         set_grad_board("gpa-fhdo")
         expt_args = {'rx_t': 0.5}
+        warnings.warn("NEED TO FIX GPA-FHDO CALIBRATION PROCESS TO DO ROUNDING PROPERLY - CSV '0' is 32767 and not 32768")
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_fhd", self.s, self.p, **expt_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
@@ -631,10 +631,10 @@ class ModelTest(unittest.TestCase):
              # gradient events must be spaced by at least 4us -
              # i.e. after any update occurs, the next update (on any
              # channel) may only occur 4us later
-             'grad_vx': (np.array([ 5, 30, 43, 50, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
-             'grad_vy': (np.array([10, 23, 43, 57, 84]), np.array([-1, 1, 0.5, -0.5, 0])),
-             'grad_vz': (np.array([10, 23,     65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
-             'grad_vz2': (np.array([10,     43, 65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vx': (np.array([10, 30, 43, 50, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vy': (np.array([15, 23, 43, 57, 84]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vz': (np.array([15, 23,     65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
+             'grad_vz2': (np.array([15,     43, 65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
 
              'rx0_rst_n': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
              'rx1_rst_n': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
@@ -644,7 +644,7 @@ class ModelTest(unittest.TestCase):
         expt_args = {'rx_t': 0.5}
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_oc1", self.s, self.p, **expt_args)
         restore_grad_board()
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
     unittest.main()        

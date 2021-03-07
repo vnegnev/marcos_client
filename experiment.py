@@ -59,7 +59,7 @@ class Experiment:
                  seq_dict=None,
                  seq_csv=None,
                  rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
-                 grad_max_update_rate=0.25, # MSPS, across all channels in parallel, best-effort
+                 grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)

@@ -256,7 +256,7 @@ class GPAFHDO:
 
     def ampere_to_dac_code(self, ampere):
         v_ref = 2.5
-        dac_code = int( (ampere / self.gpa_current_per_volt + v_ref)/5 * 0xffff)
+        dac_code = np.round( (ampere / self.gpa_current_per_volt + v_ref)/5 * 0xffff ).astype(int)
         return dac_code    
 
     def calibrate(self,
