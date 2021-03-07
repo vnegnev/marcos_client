@@ -366,9 +366,8 @@ def loopback(cic0_decimation=10, cic1_decimation=14):
     # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
     # end the new rate flag (the buffers are not empty so no offset time is needed)
     raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1    # set shift prescaling
-    raw_data[addr] = instb(RX0_RATE, 0, 0x8000 | 52); addr += 1
-    raw_data[addr] = instb(RX1_RATE, 0, 0x8000 | 49); addr += 1
-    # briefly signal that there's a new rate
+    raw_data[addr] = instb(RX0_RATE, 0, 0x4000 | 52); addr += 1
+    raw_data[addr] = instb(RX1_RATE, 0, 0x4000 | 49); addr += 1
     raw_data[addr] = rx_ctrl(0, 1, 1, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
     # end the new rate flag (the buffers are not empty so no offset time is needed)
