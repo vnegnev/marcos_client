@@ -33,7 +33,7 @@ if __name__ == "__main__":
     gdata_nonzero = np.nonzero(gdata.any(0))[0]
     
     rx = data[:,14:19].astype(np.uint8)
-    rx_en = rx[:, 4:] # ignore the rate logic, only plot the RX enables
+    rx_en = rx[:, 3:] # ignore the rate logic, only plot the RX enables
     io = data[:,19:].astype(np.uint8)
 
     fig, (txs, grads, rxs, ios) = plt.subplots(4, 1, figsize=(12,8), sharex='col')

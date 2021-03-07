@@ -104,10 +104,11 @@ class Experiment:
         self.gradb = gradb_class(self.server_command, grad_max_update_rate)        
 
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
+        self._csv = None
+        self._seq = None
         if seq_dict is not None:
-            self._csv = None
-            self.replace_dict(seq_dict)
-        else:
+            self.add_flodict(seq_dict)
+        elif seq_csv is not None:
             self._csv = seq_csv # None unless a CSV was supplied            
         
         self._print_infos = print_infos
@@ -142,11 +143,12 @@ class Experiment:
 
         return reply, return_status
 
-    def replace_dict(self, seq_dict):
-        assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
-        self._seq = {}
-        self._seq_compiled = False
+    def flo2int(self, seq_dict):
+        """Convert a floating-point sequence dictionary to an integer binary
+        dictionary"""
 
+        intdict = {}
+        
         ## Various functions to handle the conversion
         def times_us(farr):
             """ farr: float array, times in us units; [0, inf) """
@@ -190,7 +192,27 @@ class Experiment:
                 warnings.warn("Unknown flocra experiment dictionary key: " + key)
 
             for k, v in zip(keybin, valbin):
-                self._seq[k] = (tbin, v)
+                intdict[k] = (tbin, v)
+
+        return intdict
+
+    def add_intdict(self, seq_intdict):
+        """ Add an integer-format dictionary to the sequence """
+        if self._seq is None:
+            self._seq = {}
+        
+        for name, sb in seq_intdict.items():
+            if name in self._seq.keys():
+                a, b = self._seq[name]
+                self._seq[name] = ( np.append(a, sb[0]), np.append(b, sb[1]) )
+            else:
+                self._seq[name] = sb
+
+    def add_flodict(self, flodict):
+        """ Add a floating-point dictionary to the sequence """
+        assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
+        self.add_intdict( self.flo2int(flodict) )
+        self._seq_compiled = False
 
     def compile(self):
         """Convert either dictionary or CSV file into machine code, with
@@ -224,12 +246,7 @@ class Experiment:
         if self._rx_lo[1] != 0:            
             initial_cfg.update({ 'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ) })
 
-        for name, ic in initial_cfg.items():
-            if name in self._seq.keys():
-                a, b = self._seq[name]
-                self._seq[name] = ( np.append(a, ic[0]), np.append(b, ic[1]) )
-            else:
-                self._seq[name] = ic
+        self.add_intdict(initial_cfg)
         
         self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
@@ -244,12 +261,13 @@ class Experiment:
             self.compile()
         
         rx_data, msgs = sc.command({'run_seq': self._machine_code.tobytes()}, self._s)
-
-        # Auto-close server if it's simulating
-        # if sc.command({'are_you_real':0}, self._s)[0][4]['are_you_real'] == "simulation":
-        #     sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), self._s)
         
         return rx_data, msgs
+
+    def close_server(self, only_if_sim=False):
+        ## Either always close server, or only close server if it's a simulation
+        if not only_if_sim or sc.command({'are_you_real':0}, self._s)[0][4]['are_you_real'] == "simulation":
+            sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), self._s)
 
 def test_Experiment():
     sd = {'tx0_i': ( np.array([1,2,10]), np.array([-0.5, 0.5, 0.9]) ),
