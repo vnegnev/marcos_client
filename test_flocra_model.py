@@ -435,8 +435,8 @@ class ModelTest(unittest.TestCase):
         set_grad_board("ocra1")
         refl, siml = compare_csv("test_oc1_series", self.s, self.p, **oc1_config) 
         restore_grad_board()
-        self.assertEqual(refl, siml)        
-
+        self.assertEqual(refl, siml)
+        
     def test_oc1_two(self):
         """Two sets of simultaneous state changes on ocra1 gradient outputs,
         default SPI clock divisor
@@ -444,7 +444,16 @@ class ModelTest(unittest.TestCase):
         set_grad_board("ocra1")
         refl, siml = compare_csv("test_oc1_two", self.s, self.p, **oc1_config)
         restore_grad_board()
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
+        
+    def test_oc1_two_alt(self):
+        """One set of simultaneous state changes on ocra1 gradient outputs,
+        then a single change later; default SPI clock divisor
+        """
+        set_grad_board("ocra1")
+        refl, siml = compare_csv("test_oc1_two_alt", self.s, self.p, **oc1_config)
+        restore_grad_board()
+        self.assertEqual(refl, siml)
 
     def test_oc1_four(self):
         """Four simultaneous state changes on ocra1 gradient outputs, default
@@ -545,7 +554,7 @@ class ModelTest(unittest.TestCase):
         self.assertEqual(refl, siml)
 
     def test_oc1_many_dict(self):
-        """Many state changes on GPA-FHDO gradient outputs, default SPI clock divisor - simultaneous with similar TX changes. Dict version"""
+        """Many state changes on OCRA1 gradient outputs, default SPI clock divisor - simultaneous with similar TX changes. Dict version"""
         set_grad_board("ocra1")
         d = {'tx0_i': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
                           np.array([1, 5, 9, 13, 65535, 65534, 10000, 20000])),
@@ -567,7 +576,16 @@ class ModelTest(unittest.TestCase):
              }
         refl, siml = compare_dict(d, "test_oc1_many", self.s, self.p, **oc1_config)
         restore_grad_board()
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
+
+    def test_oc1_two_dict(self):
+        """Many state changes on OCRA1 gradient outputs, default SPI clock divisor - attempt to probe dict sorting bug."""
+        set_grad_board("ocra1")
+        d = {'ocra1_vx': (np.array([600, 900]), np.array([0x10001, 0x20002])),
+             'ocra1_vy': (np.array([600]), np.array([0x10001]))}
+        refl, siml = compare_dict(d, "test_oc1_two_dict", self.s, self.p, **oc1_config)
+        restore_grad_board()
+        self.assertEqual(refl, siml)
         
     def test_single_expt(self):
         """ Basic state change on a single buffer. Experiment version"""

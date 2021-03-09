@@ -247,7 +247,7 @@ class Experiment:
             initial_cfg.update({ 'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ) })
 
         self.add_intdict(initial_cfg)
-        
+
         self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc

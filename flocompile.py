@@ -12,8 +12,8 @@ st = pdb.set_trace
 grad_data_bufs = (1, 2)
 
 def debug_print(*args, **kwargs):
-    # print(*args, **kwargs)
-    pass
+    print(*args, **kwargs)
+    # pass
 
 def col2buf(col_idx, value):
     """ Returns a tuple of (buffer indices), (values), (value masks) 
@@ -33,7 +33,6 @@ def col2buf(col_idx, value):
             val_full = value | 0x80000 | ( grad_chan << 16 ) | (grad_chan << 25)
         elif grad_board == "ocra1":
             if col_idx in (5, 6, 7, 8):
-                st()
                 raise RuntimeError("OCRA1 is selected, but you are trying to control GPA-FHDO")
             grad_chan = col_idx - 9                
             val_full = value << 2 | 0x00100000 | (grad_chan << 25) | 0x01000000 # always broadcast by default
@@ -153,15 +152,22 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
     
     for k, vals in sd.items(): # iterate over dictionary keys
         col_idx = col_arr.index(k)
+        changelist_grad_local = []
         buf_idces, values, masks = col2buf(col_idx, vals[1]) # single element or array of values
         t_corr = vals[0] - latencies[buf_idces[0]]
         for bi, vv, m in zip(buf_idces, values, masks):
             for t, v in zip(t_corr, vv):
                 change = t, bi, v, m
                 if bi in grad_data_bufs:
-                    changelist_grad.append(change)
+                    changelist_grad_local.append(change)
                 else:
                     changelist.append(change)
+
+        # needed to keep coupled LSB/MSB pairs together in case
+        # multiple events occur on different channels simultaneously
+        if len(changelist_grad_local) != 0:
+            changelist_grad_local.sort(key=lambda change: change[0])
+            changelist_grad += changelist_grad_local
 
     return cl2bin(changelist, changelist_grad, initial_bufs)
 
@@ -176,15 +182,21 @@ def cl2bin(changelist, changelist_grad,
     values to program the buffers to."""
     
     # Process the grad changelist, depending on what GPA is being used etc
+    # Sort in pairs of changes, because otherwise channels get mixed up
+    changelist_grad_paired = [ [k, m] for k, m in zip(changelist_grad[::2], changelist_grad[1::2]) ]
     sortfn = lambda change: change[0]
-    changelist_grad.sort(key=sortfn) # sort by time
+    # changelist_grad.sort(key=sortfn) # sort by time
+    sortfn_paired = lambda change: change[0][0]
+    changelist_grad_paired.sort(key=sortfn_paired) # sort by time
+    changelist_grad = [k for sl in changelist_grad_paired for k in sl] # https://stackabuse.com/python-how-to-flatten-list-of-lists/
 
     t_last = [0, 0] # no updates have previously happened; [LSB, MSB]
     spi_div = (initial_bufs[0] & 0xfc) >> 2
     changelist_grad_shifted = []
     chgs = [0, 0] # [LSB, MSB]
     grad_vals = [initial_bufs[1], initial_bufs[2]] # [LSB, MSB] current output data
-    
+    grad_vals_old = [0, 0] # [LSB, MSB] previous output data
+
     for c in changelist_grad:
         t = c[0]
         debug_print("t: ", t, " t_last: ", t_last, "chgs: ", chgs, " c: ", c)
@@ -194,6 +206,7 @@ def cl2bin(changelist, changelist_grad,
         if data == grad_vals[idx]: # no actual change to buffer output
             continue # skip this change
         else:
+            grad_vals_old[idx] = grad_vals[idx]
             grad_vals[idx] = data # update the last known buffer value
         
         if t == t_last[idx]:
@@ -206,6 +219,8 @@ def cl2bin(changelist, changelist_grad,
                 # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
                 changelist_grad_shifted.append( (c[0]-chgs[idx], c[1], data, c[3]) )
                 chgs[idx] += 1
+                # return current buffer back to old value, since this one is now done in the past
+                # grad_vals[idx] = grad_vals_old[idx] # update the last known buffer value
             elif grad_board == "gpa-fhdo":
                 # don't do anything; currently will cause an error
                 # later since multiple events can't happen at the same
@@ -218,8 +233,7 @@ def cl2bin(changelist, changelist_grad,
             t_last[idx] = t
             chgs = [0, 0]
 
-    changelist += changelist_grad_shifted
-    
+    changelist += changelist_grad_shifted    
     changelist.sort(key=sortfn) # sort by time
     
     # Process and combine the change list into discrete sets of operations at each time, i.e. an output list

@@ -44,8 +44,9 @@ if __name__ == "__main__":
 
     glegends = ['fhdo x', 'fhdo y', 'fhdo z', 'fhdo z2', 'ocra1 x', 'ocra1 y', 'ocra1 z', 'ocra1 z2']
 
-    grads.step(time_us, gdata[:, gdata_nonzero], where='post')
-    grads.legend([glegends[k] for k in gdata_nonzero])
+    if gdata_nonzero.size != 0:
+        grads.step(time_us, gdata[:, gdata_nonzero], where='post')
+        grads.legend([glegends[k] for k in gdata_nonzero])
 
     rxs.step(time_us, rx_en, where='post')
     rxs.legend(["rx0 rstn", "rx1 rstn"])
