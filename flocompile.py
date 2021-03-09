@@ -12,8 +12,8 @@ st = pdb.set_trace
 grad_data_bufs = (1, 2)
 
 def debug_print(*args, **kwargs):
-    print(*args, **kwargs)
-    # pass
+    # print(*args, **kwargs)
+    pass
 
 def col2buf(col_idx, value):
     """ Returns a tuple of (buffer indices), (values), (value masks) 
@@ -39,8 +39,8 @@ def col2buf(col_idx, value):
         else:
             raise ValueError("Unknown grad board")
 
-        buf_idx = 1, 2 # GRAD_LSB, GRAD_MSB
-        val = val_full & 0xffff, val_full >> 16
+        buf_idx = 2, 1 # GRAD_MSB, GRAD_LSB
+        val = val_full >> 16, val_full & 0xffff
         mask = 0xffff, 0xffff
     elif col_idx in (13, 14): # RX rate
         buf_idx = col_idx - 10, # RX0_RATE, RX1_RATE
@@ -182,7 +182,7 @@ def cl2bin(changelist, changelist_grad,
     values to program the buffers to."""
     
     # Process the grad changelist, depending on what GPA is being used etc
-    # Sort in pairs of changes, because otherwise channels get mixed up
+    # Sort in pairs of changes, because otherwise channels can get mixed up
     changelist_grad_paired = [ [k, m] for k, m in zip(changelist_grad[::2], changelist_grad[1::2]) ]
     sortfn = lambda change: change[0]
     # changelist_grad.sort(key=sortfn) # sort by time
@@ -211,16 +211,17 @@ def cl2bin(changelist, changelist_grad,
         
         if t == t_last[idx]:
             chgs[idx] += 1
-            # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially
+            # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially,
+            # and that for each event, the MSB update is first
             if grad_board == "ocra1": # simultaneous with another grad update
                 if msb and chgs[1]: # MSB buffer and not the first grad event on this timestep
                     # turn broadcast off if this isn't the first grad event on this timestep
                     data = data & ~0x0100
+                    # return LSB back to old values, since this one is now done in the past
+                    grad_vals[:] = grad_vals_old # revert the last known buffer values
                 # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
                 changelist_grad_shifted.append( (c[0]-chgs[idx], c[1], data, c[3]) )
                 chgs[idx] += 1
-                # return current buffer back to old value, since this one is now done in the past
-                # grad_vals[idx] = grad_vals_old[idx] # update the last known buffer value
             elif grad_board == "gpa-fhdo":
                 # don't do anything; currently will cause an error
                 # later since multiple events can't happen at the same

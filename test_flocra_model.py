@@ -224,7 +224,7 @@ class ModelTest(unittest.TestCase):
         os.system("killall flocra_sim") # in case other instances were started earlier
 
         warnings.simplefilter("ignore", fc.FloServerWarning)
-        warnings.simplefilter("ignore", fc.FloRemovedInstructionWarning)
+        # warnings.simplefilter("ignore", fc.FloRemovedInstructionWarning)
     
     def setUp(self):
         # start simulation
@@ -446,12 +446,12 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
         
-    def test_oc1_two_alt(self):
-        """One set of simultaneous state changes on ocra1 gradient outputs,
-        then a single change later; default SPI clock divisor
+    def test_oc1_two_same(self):
+        """One set of simultaneous identical state changes on ocra1 gradient
+        outputs, then a single change later; default SPI clock divisor
         """
         set_grad_board("ocra1")
-        refl, siml = compare_csv("test_oc1_two_alt", self.s, self.p, **oc1_config)
+        refl, siml = compare_csv("test_oc1_two_same", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
