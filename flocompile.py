@@ -195,8 +195,7 @@ def cl2bin(changelist, changelist_grad,
     changelist_grad_shifted = []
     num_chgs = [0, 0] # [LSB, MSB]
     grad_vals = [initial_bufs[1], initial_bufs[2]] # [LSB, MSB] current output data
-    held_chgs = [None, None] # [LSB, MSB] indices in changelist_grad_shifted
-    last_held_idces = [0, 0]
+    grad_vals_old = [0, 0] # [LSB, MSB] previous output data
 
     for c in changelist_grad:
         t = c[0]
@@ -204,66 +203,46 @@ def cl2bin(changelist, changelist_grad,
         idx = c[1] - 1 # 0 for LSB, 1 for MSB
         msb = idx == 1
         data = c[2]
-
-        if t != t_last[idx]:
-            if data == grad_vals[idx]: # no actual change to buffer output
-                held_chgs[idx] = c # save for potential use in case more events occur at this timestep
-                continue # skip this change
-
-            grad_vals[idx] = data # update the last known buffer value
-            if t - t_last[idx] < 24 * (1 + spi_div) + 2: #
-                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!", FloGradWarning)
-            changelist_grad_shifted.append(c)
-            t_last[idx] = t
-            num_chgs = [0, 0]
-        else: # simultaneous event
+        # if data == grad_vals[idx]: # no actual change to buffer output
+        #     continue # skip this change
+        # else:
+        #     grad_vals_old[idx] = grad_vals[idx]
+        #     grad_vals[idx] = data # update the last known buffer value
+        
+        if t == t_last[idx]:
             num_chgs[idx] += 1
-
             # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially,
             # and that for each event, the MSB update is first
             if grad_board == "ocra1": # simultaneous with another grad update
                 if msb:
-                    if num_chgs[idx] == 1 and held_chgs[idx] is not None:
-                        # restore held MSB broadcast, if needed
-                        # last_held_idces[idx] = len(changelist_grad_shifted)
-                        changelist_grad_shifted.append( held_chgs[idx] )
-                        held_chgs[idx] = None
-
-                    data = data & ~0x0100 # turn broadcast off, since the held change will be a broadcast command
-                    changelist_grad_shifted.append( (t-num_chgs[idx], c[1], data, c[3]) )
+                    if num_chgs[1]: # MSB buffer and not the first grad event on this timestep
+                        # turn broadcast off if this isn't the first grad event on this timestep
+                        data = data & ~0x0100
+                        # return LSB back to old values, since this one is now done in the past
+                        grad_vals[:] = grad_vals_old # revert the last known buffer values
+                # else:
+                #     if data == grad_vals[idx]: # no actual change to buffer output compared to earlier LSB at this timestep
+                #         continue # skip this change
                     
-                else:
-                    if num_chgs[idx] == 1 and held_chgs[idx] is not None:
-                        last_held_idces[idx] = len(changelist_grad_shifted)
-                        changelist_grad_shifted.append( (t-num_chgs[idx], c[1], data, c[3]) )
-                        if data != grad_vals[idx]:
-                            changelist_grad_shifted.append( held_chgs[idx] )
-                            held_chgs[idx] = None
-                    else:
-                        if data != grad_vals[idx]:
-                            changelist_grad_shifted.append( (t-num_chgs[idx], c[1], data, c[3]) )
-                        else:
-                            cl = changelist_grad_shifted[last_held_idces[idx]]
-                            changelist_grad_shifted[last_held_idces[idx]] = (t-num_chgs[idx], cl[1], cl[2], cl[3])
-                
-                # if msb and num_chgs[idx] > 1: # MSB buffer and not the first grad event on this timestep
-                #     # turn broadcast off
-                #     data = data & ~0x0100                
-                # elif data == changelist_grad_shifted[chg_idces[idx]][2]: # only check MSB changes
-                #     # data is the same as the last data applied -- replace that data update with a new, earlier one
-                #     changelist_grad_shifted[chg_idces[idx]] = (t - num_chgs[idx], c[1], data, c[3])
-                #     continue # don't need to do the rest
-                
-                # # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
-                # if num_chgs[idx] > 1:
-                #     chg_idces[idx] = len(changelist_grad_shifted)
-                #     changelist_grad_shifted.append( (t-num_chgs[idx], c[1], data, c[3]) )
-            elif grad_board == "gpa-fhdo":                
+                # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
+                changelist_grad_shifted.append( (c[0]-num_chgs[idx], c[1], data, c[3]) )
+                num_chgs[idx] += 1
+            elif grad_board == "gpa-fhdo":
                 # don't do anything; currently will cause an error
                 # later since multiple events can't happen at the same
                 # time for GPA-FHDO
-                assert False, "GPA-FHDO cannot do perfectly simultaneous updates on multiple channels. Ensure updates are suitably spaced apart."
-                changelist_grad_shifted.append(c)
+                changelist_grad_shifted.append(c) 
+        else:
+            if t - t_last[idx] < 24 * (1 + spi_div) + 2: #
+                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!", FloGradWarning)
+
+            # if data == grad_vals[idx]: # no actual change to buffer output
+            #     continue # skip this change
+            
+            t_last[idx] = t
+            grad_vals[idx] = data # update the last known buffer value
+            changelist_grad_shifted.append(c)            
+            num_chgs = [0, 0]
 
     changelist += changelist_grad_shifted
     changelist.sort(key=sortfn) # sort by time

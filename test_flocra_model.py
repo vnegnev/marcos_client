@@ -464,14 +464,16 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
         
-    def test_oc1_four_series(self):
+    def test_oc1_series_same(self):
         """Several sets of simultaneous state changes on ocra1 gradient
-        outputs; default SPI clock divisor
+        outputs, with MSBs and LSBs kept similar in a pattern to test
+        a bug; default SPI clock divisor
         """
         set_grad_board("ocra1")
-        refl, siml = compare_csv("test_oc1_four_series", self.s, self.p, **oc1_config)
+        refl, siml = compare_csv("test_oc1_series_same", self.s, self.p, **oc1_config)
         restore_grad_board()
-        self.assertEqual(refl, siml)        
+        self.assertEqual(refl, siml)
+        # self.assertEqual(1, 0)
 
     def test_oc1_many(self):
         """Multiple simultaneous state changes on ocra1 gradient outputs, default
