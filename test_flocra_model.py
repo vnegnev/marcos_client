@@ -463,6 +463,15 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_oc1_four", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
+        
+    def test_oc1_four_series(self):
+        """Several sets of simultaneous state changes on ocra1 gradient
+        outputs; default SPI clock divisor
+        """
+        set_grad_board("ocra1")
+        refl, siml = compare_csv("test_oc1_four_series", self.s, self.p, **oc1_config)
+        restore_grad_board()
+        self.assertEqual(refl, siml)        
 
     def test_oc1_many(self):
         """Multiple simultaneous state changes on ocra1 gradient outputs, default
@@ -640,7 +649,8 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_fhd", self.s, self.p, **expt_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
+    @unittest.skip("Various other bugs to fix first")
     def test_uneven_sparse_expt_oc1(self):
         """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
         d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
