@@ -325,7 +325,7 @@ def loopback(cic0_decimation=7, cic1_decimation=10):
     lo_freq2 = 1.5
     lo_freq3 = 1.5
     lo_amp = 100 # percent
-    dds_demod_ch = 1
+    dds_demod_ch = 0
 
     extra_time = 20
 
@@ -429,11 +429,11 @@ def loopback(cic0_decimation=7, cic1_decimation=10):
     
     # go idle
     raw_data[addr] = instb(TX0_I, 3, 0); addr += 1
-    raw_data[addr] = instb(TX0_Q, 2, 0x8000); addr += 1
+    raw_data[addr] = instb(TX0_Q, 2, 0x0000); addr += 1
     raw_data[addr] = instb(TX1_I, 1, 0); addr += 1
-    raw_data[addr] = instb(TX1_Q, 0, 0x8000); addr += 1
+    raw_data[addr] = instb(TX1_Q, 0, 0x0000); addr += 1
     raw_data[addr] = insta(IFINISH, 0); addr += 1
-    raw_data = raw_data[:addr] # truncate
+    # raw_data = raw_data[:addr] # truncate
     return raw_data
 
 def long_loopback():
@@ -467,7 +467,7 @@ def long_loopback():
         sine_ts = 10
         max_addr = 500000
     
-    dds_demod_ch = 1
+    dds_demod_ch = 0
     raw_data = np.zeros(max_addr, dtype=np.uint32) # massive sequence
     addr = 0
 
@@ -601,7 +601,7 @@ if __name__ == "__main__":
 
         plt.show()
         
-    if False: # single shot loopback
+    if True: # single shot loopback
         
         # res = run_streaming_test(long_loopback())
         res = run_streaming_test(loopback())
@@ -622,7 +622,7 @@ if __name__ == "__main__":
 
         plt.show()
 
-    if True: # multiple trials, verify mean against saved
+    if False: # multiple trials, verify mean against saved
         verify_means = True
         save_means = False # If true, will overwrite reference data - use with care!
         
