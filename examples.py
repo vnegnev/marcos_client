@@ -24,21 +24,21 @@ def trapezoid(plateau_a, total_t, ramp_t, ramp_pts, total_t_end_to_end=True, bas
     return t, a
 
 def grad_echo(trs=21, plot_rx=False, init_gpa=False, 
-              dbg_sc=1, # set to 0 to avoid 2nd RF debugging pulse, otherwise amp between 0 or 1
-              lo_freq=0.05, # MHz
+              dbg_sc=0.5, # set to 0 to avoid 2nd RF debugging pulse, otherwise amp between 0 or 1
+              lo_freq=0.1, # MHz
               rf_amp=1, # 1 = full-scale
               
               slice_amp=0.4, # 1 = gradient full-scale
               phase_amp=0.3, # 1 = gradient full-scale
               readout_amp=0.8, # 1 = gradient full-scale
-              rf_duration=100,
+              rf_duration=50,
               trap_ramp_duration=50, # us, ramp-up/down time
-              trap_ramp_pts=20, # how many points to subdivide ramp into
+              trap_ramp_pts=5, # how many points to subdivide ramp into
               phase_delay=100, # how long after RF end before starting phase ramp-up
-              phase_duration=500, # length of phase plateau
+              phase_duration=200, # length of phase plateau
               tr_wait=100, # delay after end of RX before start of next TR
 
-              rx_period = 10/3 # us, 300 kHz RX sampling rate
+              rx_period=10/3 # us, 3.333us, 300 kHz rate
               ):
     ## All times are in the context of a single TR, starting at time 0
 
@@ -59,7 +59,7 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
     tx_gate_pre = 2 # us, time to start the TX gate before the RF pulse begins
     tx_gate_post = 1 # us, time to keep the TX gate on after the RF pulse ends
     
-    tr_total_time = readout_tstart + readout_duration + tr_wait # start-finish TR time
+    tr_total_time = readout_tstart + readout_duration + tr_wait + 7000 # start-finish TR time
 
     def grad_echo_tr(tstart, pamp):
         gvxt, gvxa = trapezoid(slice_amp, slice_duration, trap_ramp_duration, trap_ramp_pts)
@@ -75,10 +75,13 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
             # second tx0 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,   rx_tcentre - 10, rx_tcentre + 10]) + tstart,
                      np.array([rf_amp,0,  dbg_sc*(1 + 0.5j),0]) ),
+            
+            'tx1': ( np.array([rx_tstart + 15, rx_tend - 15]) + tstart, np.array([dbg_sc * pamp * (1 + 0.5j), 0]) ),            
             'grad_vx': ( gvxt + tstart + slice_tstart, gvxa ),
             'grad_vy': ( gvyt + tstart + phase_tstart, gvya),
             'grad_vz': ( gvzt + tstart + readout_tstart, gvza),
-            'rx0_rst_n': ( np.array([rx_tstart, rx_tend]) + tstart, np.array([1, 0]) ),
+            'rx0_en': ( np.array([rx_tstart, rx_tend]) + tstart, np.array([1, 0]) ),
+            'rx1_en': ( np.array([rx_tstart, rx_tend]) + tstart, np.array([1, 0]) ), # acquire on RX1 for example too
             'tx_gate': ( np.array([rf_tstart - tx_gate_pre, rf_tend + tx_gate_post]) + tstart, np.array([1, 0]) )
         }
 
@@ -98,6 +101,8 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
     if plot_rx:
         plt.plot( np.array(rxr['rx0_i'], dtype=np.int32) )
         plt.plot( np.array(rxr['rx0_q'], dtype=np.int32) )
+        plt.plot( np.array(rxr['rx1_i'], dtype=np.int32) )
+        plt.plot( np.array(rxr['rx1_q'], dtype=np.int32) )        
         plt.show()
 
 def radial(trs=36, plot_rx=False, init_gpa=False):
@@ -115,23 +120,25 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
     rx_tend = 180 # us
     rx_period = 3 # us
     tr_total_time = 220 # start-finish TR time
+    # tr_total_time = 5000 # start-finish TR time
 
     tx_gate_pre = 2 # us, time to start the TX gate before the RF pulse begins
     tx_gate_post = 1 # us, time to keep the TX gate on after the RF pulse ends
 
     def radial_tr(tstart, th):
+        dbg_sc=0.01
         gx = G * np.cos(th)
         gy = G * np.sin(th)
-        dbg_sc = 1 # set to 0 to avoid 2nd RF debugging pulse
         value_dict = {
-            # second tx0 pulse purely for loopback debugging
+            # second tx0 pulse and tx1 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,    rx_tstart + 15, rx_tend - 15]),
                      np.array([rf_amp, 0,    dbg_sc * (gx+gy*1j), 0]) ),
-            'grad_vy': ( np.array([grad_tstart]),
-                         np.array([gx]) ),
+            'tx1': ( np.array([rx_tstart + 15, rx_tend - 15]), np.array([dbg_sc * (gx+gy*1j), 0]) ),
             'grad_vz': ( np.array([grad_tstart]),
+                         np.array([gx]) ),
+            'grad_vy': ( np.array([grad_tstart]),
                          np.array([gy]) ),
-            'rx0_rst_n' : ( np.array([rx_tstart, rx_tend]),
+            'rx0_en' : ( np.array([rx_tstart, rx_tend]),
                             np.array([1, 0]) ),
             'tx_gate' : ( np.array([rf_tstart - tx_gate_pre, rf_tend + tx_gate_post]),
                           np.array([1, 0]) )
@@ -164,5 +171,6 @@ if __name__ == "__main__":
     assert grad_board == "ocra1", "Please run examples with OCRA1; GPA-FHDO tests not yet ready"
     # import cProfile
     # cProfile.run('test_grad_echo_loop()')
-    grad_echo(trs=10, init_gpa=True)
+    # for k in range(100):
+    grad_echo(lo_freq=1, trs=2, plot_rx=True, init_gpa=True, dbg_sc=1)
     # radial(trs=100, init_gpa=True)

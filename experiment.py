@@ -179,7 +179,7 @@ class Experiment:
                 keyb, channel = self.gradb.key_convert(key)
                 keybin = keyb, # tuple
                 valbin = self.gradb.float2bin(vals, channel),
-            elif key in ['rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out']:
+            elif key in ['rx0_rst_n', 'rx1_rst_n', 'rx0_en', 'rx1_en', 'tx_gate', 'rx_gate', 'trig_out']:
                 keybin = key,
                 # binary-valued data
                 valbin = vals.astype(np.int32),
@@ -230,8 +230,10 @@ class Experiment:
                        'rx1_rate': ( np.array([tstart + rx_wait]), np.array([self._rx_divs[1]]) ),
                        'rx0_rate_valid': ( np.array([tstart + rx_wait, tstart + rx_wait + 1]), np.array([1, 0]) ),
                        'rx1_rate_valid': ( np.array([tstart + rx_wait, tstart + rx_wait + 1]), np.array([1, 0]) ),
-                       'rx0_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
-                       'rx1_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       # 'rx0_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       # 'rx1_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       'rx0_rst_n': ( np.array([tstart]), np.array([1]) ),
+                       'rx1_rst_n': ( np.array([tstart]), np.array([1]) ),                       
                        'lo0_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[0]]) ),
                        'lo1_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[1]]) ),
                        'lo2_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[2]]) ),

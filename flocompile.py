@@ -56,28 +56,33 @@ def col2buf(col_idx, value):
         bit_idx = col_idx - 17
         val = value << (6 + bit_idx),
         mask = 0x1 << (6 + bit_idx),
-    elif col_idx in (19, 20, 21): # TX/RX gates, external trig
-        buf_idx = 15, # GATES_LEDS
+    elif col_idx in (19, 20): # RX resets, active low
+        buf_idx = 16, # RX_CTRL
         bit_idx = col_idx - 19
+        val = value << (8 + bit_idx),
+        mask = 0x1 << (8 + bit_idx),        
+    elif col_idx in (21, 22, 23): # TX/RX gates, external trig
+        buf_idx = 15, # GATES_LEDS
+        bit_idx = col_idx - 21
         val = value << bit_idx,
         mask = 0x1 << bit_idx,
-    elif col_idx == 22: # LEDs
+    elif col_idx == 24: # LEDs
         buf_idx = 15, # GATES_LEDS
         val = value << 8,
         mask = 0xff00,
-    elif col_idx in (23, 24, 25): # LO freqs
-        lo_lsb_buf = 9 + 2*(col_idx - 23) # 9, 11 or 13
+    elif col_idx in (25, 26, 27): # LO freqs
+        lo_lsb_buf = 9 + 2*(col_idx - 25) # 9, 11 or 13
         buf_idx = lo_lsb_buf, lo_lsb_buf + 1 # DDS[0,1,2]_PHASE_LSB, DDS[0,1,2]_PHASE_MSB
         val = value & 0xffff, value >> 16
         mask = 0xffff, 0x7fff
-    elif col_idx in (26, 27, 28): # LO phase reset
-        lo_msb_buf = 10 + 2*(col_idx - 26) # DDS[0,1,2]_PHASE_MSB
+    elif col_idx in (28, 29, 30): # LO phase reset
+        lo_msb_buf = 10 + 2*(col_idx - 28) # DDS[0,1,2]_PHASE_MSB
         buf_idx = lo_msb_buf,
         val = value << 15,
         mask = 0x8000,
-    elif col_idx in (29, 30): # LO source for RX demodulation
+    elif col_idx in (31, 32): # LO source for RX demodulation
         buf_idx = 16, # RX_CTRL
-        bit_idx = (col_idx - 29) * 2
+        bit_idx = (col_idx - 31) * 2
         val = value << bit_idx,
         mask = 0x0003 << bit_idx,
 
@@ -99,7 +104,7 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np
     with open(path, 'r') as csvf:
         cols = csvf.readline().strip().split(',')[1:]
 
-    assert cols[-1] == ' csv_version_0.1', "Wrong CSV format"
+    assert cols[-1] == ' csv_version_0.2', "Wrong CSV format"
 
     if quick_start:
         # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from the simulator
@@ -143,7 +148,8 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
 
     col_arr = ['clock cycles', 'tx0_i', 'tx0_q', 'tx1_i', 'tx1_q', 'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
                'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2', 'rx0_rate', 'rx1_rate',
-               'rx0_rate_valid', 'rx1_rate_valid', 'rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out', 'leds',
+               'rx0_rate_valid', 'rx1_rate_valid', 'rx0_rst_n', 'rx1_rst_n', 'rx0_en', 'rx1_en',
+               'tx_gate', 'rx_gate', 'trig_out', 'leds',
                'lo0_freq', 'lo1_freq', 'lo2_freq', 'lo0_rst', 'lo1_rst', 'lo2_rst',
                'rx0_lo', 'rx1_lo', ] # TODO: these two rows aren't yet in the CSV and thus aren't tested by test_flocra_model.py
 

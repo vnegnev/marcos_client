@@ -32,9 +32,9 @@ if __name__ == "__main__":
     gdata = np.hstack([fhdo, ocra1])
     gdata_nonzero = np.nonzero(gdata.any(0))[0]
     
-    rx = data[:,14:19].astype(np.uint8)
-    rx_en = rx[:, 3:] # ignore the rate logic, only plot the RX enables
-    io = data[:,19:].astype(np.uint8)
+    rx = data[:,14:21].astype(np.uint8)
+    rx_en = rx[:, 5:] # ignore the rate logic, only plot the RX enables
+    io = data[:,21:].astype(np.uint8)
 
     fig, (txs, grads, rxs, ios) = plt.subplots(4, 1, figsize=(12,8), sharex='col')
 
@@ -49,7 +49,7 @@ if __name__ == "__main__":
         grads.legend([glegends[k] for k in gdata_nonzero])
 
     rxs.step(time_us, rx_en, where='post')
-    rxs.legend(["rx0 rstn", "rx1 rstn"])
+    rxs.legend(["rx0 en", "rx1 en"])
 
     ios.step(time_us, io, where='post')
     ios.legend(['tx gate', 'rx gate', 'trig out', 'leds'])        

@@ -534,17 +534,21 @@ class ModelTest(unittest.TestCase):
 
     def test_cfg_dict(self):
         """ Configuration and LED bits/words. Dict version"""
-        d = {'rx0_rate': ( np.array([100, 110, 208, 210]), np.array([1, 0, 1, 0]) ),
-             'rx1_rate': ( np.array([110, 120, 205, 208]), np.array([1, 0, 1, 0]) ),
-             'rx0_rate_valid': ( np.array([120, 130, 202, 205]), np.array([1, 0, 1, 0]) ),
-             'rx1_rate_valid': ( np.array([130, 140, 199, 202]), np.array([1, 0, 1, 0]) ),
-             'rx0_rst_n': ( np.array([140, 150, 196, 199]), np.array([1, 0, 1, 0]) ),
-             'rx1_rst_n': ( np.array([150, 160, 194, 196]), np.array([1, 0, 1, 0]) ),
-             'tx_gate': ( np.array([160, 170, 193, 194]), np.array([1, 0, 1, 0]) ),
-             'rx_gate': ( np.array([170, 180, 192, 193]), np.array([1, 0, 1, 0]) ),
-             'trig_out': ( np.array([180, 190, 191, 192]), np.array([1, 0, 1, 0]) ),
-             'leds': ( np.array([100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 191, 192, 193, 194, 196, 199, 202, 205, 208, 210]),
-                       np.array([  1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  20,  30,  40,  50,  60,  70,  80,  90, 100, 255]) )
+        d = {'rx0_rate': ( np.array([100, 110, 228, 230]), np.array([1, 0, 1, 0]) ),
+             'rx1_rate': ( np.array([110, 120, 225, 228]), np.array([1, 0, 1, 0]) ),
+             'rx0_rate_valid': ( np.array([120, 130, 222, 225]), np.array([1, 0, 1, 0]) ),
+             'rx1_rate_valid': ( np.array([130, 140, 220, 222]), np.array([1, 0, 1, 0]) ),
+             'rx0_rst_n': ( np.array([140, 150, 218, 220]), np.array([1, 0, 1, 0]) ),
+             'rx1_rst_n': ( np.array([150, 160, 216, 218]), np.array([1, 0, 1, 0]) ),
+             'rx0_en': ( np.array([160, 170, 215, 216]), np.array([1, 0, 1, 0]) ),
+             'rx1_en': ( np.array([170, 180, 214, 215]), np.array([1, 0, 1, 0]) ),             
+             'tx_gate': ( np.array([180, 190, 213, 214]), np.array([1, 0, 1, 0]) ),
+             'rx_gate': ( np.array([190, 200, 212, 213]), np.array([1, 0, 1, 0]) ),
+             'trig_out': ( np.array([200, 210, 211, 212]), np.array([1, 0, 1, 0]) ),
+             'leds': ( np.array([100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210,
+                                 211, 212, 213, 214, 215, 216, 218, 220, 222, 225, 228, 230]),
+                       np.array([  1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11, 12,
+                                   20,  30,  40,  50,  60,  70,  80,  90, 100, 110, 120, 255]) )
              }
         refl, siml = compare_dict(d, "test_cfg", self.s, self.p)
         self.assertEqual(refl, siml)
@@ -641,8 +645,8 @@ class ModelTest(unittest.TestCase):
              'grad_vz': (np.array([ 6,  22,     79,  88]), np.array([-1, 1,       0.5, 0])),
              'grad_vz2': (np.array([18,     46, 67,  92]), np.array([-1,      1,  0.5, 0])),
 
-             'rx0_rst_n': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
-             'rx1_rst_n': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
+             'rx0_en': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
+             'rx1_en': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
              }
 
         set_grad_board("gpa-fhdo")
