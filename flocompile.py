@@ -28,19 +28,19 @@ def col2buf(col_idx, value):
         # timing and broadcast logic will be handled at the next stage
         if grad_board == "gpa-fhdo":
             if col_idx in (9, 10, 11, 12):
-                raise RuntimeError("GPA-FHDO is selected, but CSV is trying to control OCRA1")
+                raise RuntimeError("GPA-FHDO is selected, but you are trying to control OCRA1")
             grad_chan = col_idx - 5
             val_full = value | 0x80000 | ( grad_chan << 16 ) | (grad_chan << 25)
         elif grad_board == "ocra1":
             if col_idx in (5, 6, 7, 8):
-                raise RuntimeError("OCRA1 is selected, but CSV is trying to control GPA-FHDO")
+                raise RuntimeError("OCRA1 is selected, but you are trying to control GPA-FHDO")
             grad_chan = col_idx - 9                
             val_full = value << 2 | 0x00100000 | (grad_chan << 25) | 0x01000000 # always broadcast by default
         else:
             raise ValueError("Unknown grad board")
 
-        buf_idx = 1, 2 # GRAD_LSB, GRAD_MSB
-        val = val_full & 0xffff, val_full >> 16
+        buf_idx = 2, 1 # GRAD_MSB, GRAD_LSB
+        val = val_full >> 16, val_full & 0xffff
         mask = 0xffff, 0xffff
     elif col_idx in (13, 14): # RX rate
         buf_idx = col_idx - 10, # RX0_RATE, RX1_RATE
@@ -56,28 +56,33 @@ def col2buf(col_idx, value):
         bit_idx = col_idx - 17
         val = value << (6 + bit_idx),
         mask = 0x1 << (6 + bit_idx),
-    elif col_idx in (19, 20, 21): # TX/RX gates, external trig
-        buf_idx = 15, # GATES_LEDS
+    elif col_idx in (19, 20): # RX resets, active low
+        buf_idx = 16, # RX_CTRL
         bit_idx = col_idx - 19
+        val = value << (8 + bit_idx),
+        mask = 0x1 << (8 + bit_idx),        
+    elif col_idx in (21, 22, 23): # TX/RX gates, external trig
+        buf_idx = 15, # GATES_LEDS
+        bit_idx = col_idx - 21
         val = value << bit_idx,
         mask = 0x1 << bit_idx,
-    elif col_idx == 22: # LEDs
+    elif col_idx == 24: # LEDs
         buf_idx = 15, # GATES_LEDS
         val = value << 8,
         mask = 0xff00,
-    elif col_idx in (23, 24, 25): # LO freqs
-        lo_lsb_buf = 9 + 2*(col_idx - 23) # 9, 11 or 13
+    elif col_idx in (25, 26, 27): # LO freqs
+        lo_lsb_buf = 9 + 2*(col_idx - 25) # 9, 11 or 13
         buf_idx = lo_lsb_buf, lo_lsb_buf + 1 # DDS[0,1,2]_PHASE_LSB, DDS[0,1,2]_PHASE_MSB
         val = value & 0xffff, value >> 16
         mask = 0xffff, 0x7fff
-    elif col_idx in (26, 27, 28): # LO phase reset
-        lo_msb_buf = 10 + 2*(col_idx - 26) # DDS[0,1,2]_PHASE_MSB
+    elif col_idx in (28, 29, 30): # LO phase reset
+        lo_msb_buf = 10 + 2*(col_idx - 28) # DDS[0,1,2]_PHASE_MSB
         buf_idx = lo_msb_buf,
         val = value << 15,
         mask = 0x8000,
-    elif col_idx in (29, 30): # LO source for RX demodulation
-        buf_idx = 16 # RX_CTRL
-        bit_idx = (col_idx - 29) * 2
+    elif col_idx in (31, 32): # LO source for RX demodulation
+        buf_idx = 16, # RX_CTRL
+        bit_idx = (col_idx - 31) * 2
         val = value << bit_idx,
         mask = 0x0003 << bit_idx,
 
@@ -99,7 +104,7 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np
     with open(path, 'r') as csvf:
         cols = csvf.readline().strip().split(',')[1:]
 
-    assert cols[-1] == ' csv_version_0.1', "Wrong CSV format"
+    assert cols[-1] == ' csv_version_0.2', "Wrong CSV format"
 
     if quick_start:
         # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from the simulator
@@ -143,7 +148,8 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
 
     col_arr = ['clock cycles', 'tx0_i', 'tx0_q', 'tx1_i', 'tx1_q', 'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
                'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2', 'rx0_rate', 'rx1_rate',
-               'rx0_rate_valid', 'rx1_rate_valid', 'rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out', 'leds',
+               'rx0_rate_valid', 'rx1_rate_valid', 'rx0_rst_n', 'rx1_rst_n', 'rx0_en', 'rx1_en',
+               'tx_gate', 'rx_gate', 'trig_out', 'leds',
                'lo0_freq', 'lo1_freq', 'lo2_freq', 'lo0_rst', 'lo1_rst', 'lo2_rst',
                'rx0_lo', 'rx1_lo', ] # TODO: these two rows aren't yet in the CSV and thus aren't tested by test_flocra_model.py
 
@@ -152,18 +158,22 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
     
     for k, vals in sd.items(): # iterate over dictionary keys
         col_idx = col_arr.index(k)
+        changelist_grad_local = []
         buf_idces, values, masks = col2buf(col_idx, vals[1]) # single element or array of values
-        try:
-            t_corr = vals[0] - latencies[buf_idces[0]]
-        except IndexError:
-            st()
+        t_corr = vals[0] - latencies[buf_idces[0]]
         for bi, vv, m in zip(buf_idces, values, masks):
             for t, v in zip(t_corr, vv):
                 change = t, bi, v, m
                 if bi in grad_data_bufs:
-                    changelist_grad.append(change)
+                    changelist_grad_local.append(change)
                 else:
                     changelist.append(change)
+
+        # needed to keep coupled LSB/MSB pairs together in case
+        # multiple events occur on different channels simultaneously
+        if len(changelist_grad_local) != 0:
+            changelist_grad_local.sort(key=lambda change: change[0])
+            changelist_grad += changelist_grad_local
 
     return cl2bin(changelist, changelist_grad, initial_bufs)
 
@@ -178,50 +188,69 @@ def cl2bin(changelist, changelist_grad,
     values to program the buffers to."""
     
     # Process the grad changelist, depending on what GPA is being used etc
+    # Sort in pairs of changes, because otherwise channels can get mixed up
+    changelist_grad_paired = [ [k, m] for k, m in zip(changelist_grad[::2], changelist_grad[1::2]) ]
     sortfn = lambda change: change[0]
-    changelist_grad.sort(key=sortfn) # sort by time
+    # changelist_grad.sort(key=sortfn) # sort by time
+    sortfn_paired = lambda change: change[0][0]
+    changelist_grad_paired.sort(key=sortfn_paired) # sort by time
+    changelist_grad = [k for sl in changelist_grad_paired for k in sl] # https://stackabuse.com/python-how-to-flatten-list-of-lists/
 
     t_last = [0, 0] # no updates have previously happened; [LSB, MSB]
     spi_div = (initial_bufs[0] & 0xfc) >> 2
     changelist_grad_shifted = []
-    chgs = [0, 0] # [LSB, MSB]
+    num_chgs = [0, 0] # [LSB, MSB]
     grad_vals = [initial_bufs[1], initial_bufs[2]] # [LSB, MSB] current output data
-    
+    grad_vals_old = [0, 0] # [LSB, MSB] previous output data
+
     for c in changelist_grad:
         t = c[0]
-        debug_print("t: ", t, " t_last: ", t_last, "chgs: ", chgs, " c: ", c)
+        debug_print("t: ", t, " t_last: ", t_last, "num_chgs: ", num_chgs, " c: ", c)
         idx = c[1] - 1 # 0 for LSB, 1 for MSB
         msb = idx == 1
         data = c[2]
-        if data == grad_vals[idx]: # no actual change to buffer output
-            continue # skip this change
-        else:
-            grad_vals[idx] = data # update the last known buffer value
+        # if data == grad_vals[idx]: # no actual change to buffer output
+        #     continue # skip this change
+        # else:
+        #     grad_vals_old[idx] = grad_vals[idx]
+        #     grad_vals[idx] = data # update the last known buffer value
         
         if t == t_last[idx]:
-            chgs[idx] += 1
-            # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially
+            num_chgs[idx] += 1
+            # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially,
+            # and that for each event, the MSB update is first
             if grad_board == "ocra1": # simultaneous with another grad update
-                if msb and chgs[1]: # MSB buffer and not the first grad event on this timestep
-                    # turn broadcast off if this isn't the first grad event on this timestep
-                    data = data & ~0x0100
+                if msb:
+                    if num_chgs[1]: # MSB buffer and not the first grad event on this timestep
+                        # turn broadcast off if this isn't the first grad event on this timestep
+                        data = data & ~0x0100
+                        # return LSB back to old values, since this one is now done in the past
+                        grad_vals[:] = grad_vals_old # revert the last known buffer values
+                # else:
+                #     if data == grad_vals[idx]: # no actual change to buffer output compared to earlier LSB at this timestep
+                #         continue # skip this change
+                    
                 # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
-                changelist_grad_shifted.append( (c[0]-chgs[idx], c[1], data, c[3]) )
-                chgs[idx] += 1
+                changelist_grad_shifted.append( (c[0]-num_chgs[idx], c[1], data, c[3]) )
+                num_chgs[idx] += 1
             elif grad_board == "gpa-fhdo":
                 # don't do anything; currently will cause an error
                 # later since multiple events can't happen at the same
                 # time for GPA-FHDO
                 changelist_grad_shifted.append(c) 
         else:
-            if t - t_last[idx] < 24 * (1 + spi_div) + 2: # 
-                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
-            changelist_grad_shifted.append(c)
+            if t - t_last[idx] < 24 * (1 + spi_div) + 2: #
+                warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!", FloGradWarning)
+
+            # if data == grad_vals[idx]: # no actual change to buffer output
+            #     continue # skip this change
+            
             t_last[idx] = t
-            chgs = [0, 0]
+            grad_vals[idx] = data # update the last known buffer value
+            changelist_grad_shifted.append(c)            
+            num_chgs = [0, 0]
 
     changelist += changelist_grad_shifted
-    
     changelist.sort(key=sortfn) # sort by time
     
     # Process and combine the change list into discrete sets of operations at each time, i.e. an output list
@@ -247,8 +276,12 @@ def cl2bin(changelist, changelist_grad,
                 current_time = time
             buf_diff = (current_bufs[buf] ^ val) & mask
             assert buf_diff & change_masks[buf] == 0, "Tried to set a buffer to two values at once"
-            if buf_diff == 0 and buf not in (1, 2): # not one of the gradient update buffers
-                warnings.warn("Instruction will have no effect. Skipping...")
+            if buf_diff == 0:
+                if buf not in (1, 2):
+                    # gradient buffers will have unneeded instructions
+                    # all the time, so not worth warning the user for
+                    # those
+                    warnings.warn("Instruction will have no effect. Skipping...", FloRemovedInstructionWarning)
                 continue
             val_masked = val & mask
             old_val_unmasked = current_bufs[buf] & ~mask

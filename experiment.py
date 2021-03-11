@@ -6,13 +6,15 @@ import socket, time, warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-import pdb
-st = pdb.set_trace
-
 from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 import grad_board as gb
 import server_comms as sc
 import flocompile as fc
+
+import pdb
+st = pdb.set_trace
+
+######## TODO: configure the final buffers as well, whether in flocompile or elsewhere
 
 class Experiment:
     """Wrapper class for managing an entire experimental sequence 
@@ -36,12 +38,11 @@ class Experiment:
 
     OPTIONAL PARAMETERS - ONLY ALTER IF YOU KNOW WHAT YOU'RE DOING
 
-    spi_freq: frequency to run the gradient SPI interface at - must be
-    high enough to support your maximum gradient sample rate but not
-    so high that you experience communication issues. Leave this alone
-    unless you know what you're doing.
-
-    local_grad_board: override local_config.py setting
+    grad_max_update_rate: used to calculate the frequency to run the
+    gradient SPI interface at - must be high enough to support your
+    maximum gradient sample rate but not so high that you experience
+    communication issues. Leave this alone unless you know what you're
+    doing.
 
     print_infos: print debugging messages from server to stdout
 
@@ -49,16 +50,16 @@ class Experiment:
     exceptions by the class, halting the program
 
     init_gpa: initialise the GPA during the construction of this class
+
     """
 
     def __init__(self,
-                 lo_freq, # MHz
+                 lo_freq=1, # MHz
                  rx_t=1, # us, best-effort 
                  seq_dict=None,
                  seq_csv=None,
                  rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
-                 spi_freq=5, # MHz, best-effort -- default supports at least 100 ksps
-                 local_grad_board="auto", # auto uses the local_config.py value, otherwise can be overridden here
+                 grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
@@ -68,7 +69,8 @@ class Experiment:
 
         # create socket early so that destructor works
         if prev_socket is None:
-            self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)            
+            self._s.connect( (ip_address, port) )
         else:
             self._s = prev_socket
         
@@ -94,25 +96,21 @@ class Experiment:
 
         self._initial_wait = initial_wait
 
-        assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
-        if seq_dict is not None:
-            self._csv = None
-            self.replace_dict(seq_dict)
-        else:
-            self._csv = seq_csv # None unless a CSV was supplied
-            
-        self._s.connect( (ip_address, port) )
-        
-        if local_grad_board == "auto":
-            local_grad_board = grad_board
-            
-        assert local_grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
-        if local_grad_board == 'ocra1':
+        assert grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
+        if grad_board == 'ocra1':
             gradb_class = gb.OCRA1
         else:
             gradb_class = gb.GPAFHDO
-        self.gradb = gradb_class(self.server_command, spi_freq)
+        self.gradb = gradb_class(self.server_command, grad_max_update_rate)        
 
+        assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
+        self._csv = None
+        self._seq = None
+        if seq_dict is not None:
+            self.add_flodict(seq_dict)
+        elif seq_csv is not None:
+            self._csv = seq_csv # None unless a CSV was supplied            
+        
         self._print_infos = print_infos
         self._assert_errors = assert_errors
 
@@ -145,11 +143,12 @@ class Experiment:
 
         return reply, return_status
 
-    def replace_dict(self, seq_dict):
-        assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
-        self._seq = {}
-        self._seq_compiled = False
+    def flo2int(self, seq_dict):
+        """Convert a floating-point sequence dictionary to an integer binary
+        dictionary"""
 
+        intdict = {}
+        
         ## Various functions to handle the conversion
         def times_us(farr):
             """ farr: float array, times in us units; [0, inf) """
@@ -161,7 +160,7 @@ class Experiment:
 
         def tx_complex(farr):
             """ farr: complex float array, [-1-1j, 1+1j] -- returns a tuple """
-            idata, qdata = farr.real(), farr.imag()
+            idata, qdata = farr.real, farr.imag
             return tx_real(idata), tx_real(qdata)
 
         for key, (times, vals) in seq_dict.items():
@@ -173,21 +172,47 @@ class Experiment:
             elif key in ['tx0', 'tx1']:
                 valbin = tx_complex(vals)
                 keybin = key + '_i', key + '_q'
-            elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2', 'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2']:
+            elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2',
+                         'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
+                         'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2']:
                 # flocompile will figure out whether the key matches the selected grad board
-                keybin = key,
-                valbin = self.gradb.float2bin(vals),
-            elif key in ['rx0_rst_n', 'rx1_rst_n', 'tx_gate', 'rx_gate', 'trig_out']:
+                keyb, channel = self.gradb.key_convert(key)
+                keybin = keyb, # tuple
+                valbin = self.gradb.float2bin(vals, channel),
+            elif key in ['rx0_rst_n', 'rx1_rst_n', 'rx0_en', 'rx1_en', 'tx_gate', 'rx_gate', 'trig_out']:
                 keybin = key,
                 # binary-valued data
                 valbin = vals.astype(np.int32),
-                assert np.all( (0 <= valbin) & (valbin <= 1) ), "Binary columns must be [0,1] or [False, True] valued"
+                for vb in valbin:
+                    assert np.all( (0 <= vb) & (vb <= 1) ), "Binary columns must be [0,1] or [False, True] valued"
             elif key in ['leds']:
                 keybin = key,
                 valbin = vals.astype(np.uint8), # 8-bit value
+            else:
+                warnings.warn("Unknown flocra experiment dictionary key: " + key)
 
             for k, v in zip(keybin, valbin):
-                self._seq[k] = (tbin, v)
+                intdict[k] = (tbin, v)
+
+        return intdict
+
+    def add_intdict(self, seq_intdict):
+        """ Add an integer-format dictionary to the sequence """
+        if self._seq is None:
+            self._seq = {}
+        
+        for name, sb in seq_intdict.items():
+            if name in self._seq.keys():
+                a, b = self._seq[name]
+                self._seq[name] = ( np.append(a, sb[0]), np.append(b, sb[1]) )
+            else:
+                self._seq[name] = sb
+
+    def add_flodict(self, flodict):
+        """ Add a floating-point dictionary to the sequence """
+        assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
+        self.add_intdict( self.flo2int(flodict) )
+        self._seq_compiled = False
 
     def compile(self):
         """Convert either dictionary or CSV file into machine code, with
@@ -205,20 +230,27 @@ class Experiment:
                        'rx1_rate': ( np.array([tstart + rx_wait]), np.array([self._rx_divs[1]]) ),
                        'rx0_rate_valid': ( np.array([tstart + rx_wait, tstart + rx_wait + 1]), np.array([1, 0]) ),
                        'rx1_rate_valid': ( np.array([tstart + rx_wait, tstart + rx_wait + 1]), np.array([1, 0]) ),
-                       'rx0_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
-                       'rx1_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       # 'rx0_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       # 'rx1_rst_n': ( np.array([tstart, tstart + 2*rx_wait]), np.array([1, 0]) ),
+                       'rx0_rst_n': ( np.array([tstart]), np.array([1]) ),
+                       'rx1_rst_n': ( np.array([tstart]), np.array([1]) ),                       
                        'lo0_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[0]]) ),
                        'lo1_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[1]]) ),
                        'lo2_freq': ( np.array([tstart]), np.array([self._dds_phase_steps[2]]) ),
                        'lo0_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
                        'lo1_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
-                       'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) ),
-                       'rx0_lo': ( np.array([tstart]), np.array([self._rx_lo[0]]) ),
-                       'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ),
+                       'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) )
                        }
-        
-        self._seq.update(initial_cfg)
-        self._binseq = np.array( fc.dict2bin(self._seq,
+
+        # LO source configuration (only set non-default values if necessary)
+        if self._rx_lo[0] != 0:
+            initial_cfg.update({ 'rx0_lo': ( np.array([tstart]), np.array([self._rx_lo[0]]) ) })
+        if self._rx_lo[1] != 0:            
+            initial_cfg.update({ 'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ) })
+
+        self.add_intdict(initial_cfg)
+
+        self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
                                              ), dtype=np.uint32 )
@@ -230,16 +262,22 @@ class Experiment:
         if self._seq_compiled is False:
             self.compile()
         
-        rx_data, msgs = sc.command({'run_seq': self._binseq.tobytes()}, self._s)
-        st()
+        rx_data, msgs = sc.command({'run_seq': self._machine_code.tobytes()}, self._s)
         
-        return np.frombuffer(reply[4]['acq'], np.complex64), status
+        return rx_data, msgs
+
+    def close_server(self, only_if_sim=False):
+        ## Either always close server, or only close server if it's a simulation
+        if not only_if_sim or sc.command({'are_you_real':0}, self._s)[0][4]['are_you_real'] == "simulation":
+            sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), self._s)
 
 def test_Experiment():
-    sd = {'tx0_i': ( np.array([1,2,10]), np.array([-0.5, 0.5, 0.9]) )}
+    sd = {'tx0_i': ( np.array([1,2,10]), np.array([-0.5, 0.5, 0.9]) ),
+          'tx0_q': ( np.array([1.5, 2.5, 9]), np.array([-0.9, -0.4, 0.6]) ),
+          'rx0_rst_n': (np.array([0.5, 10.5]), np.array([1, 0]) ),
+          'rx1_rst_n': (np.array([0.5, 10.5]), np.array([1, 0]) )}
     exp = Experiment(lo_freq=1, seq_dict=sd)
     exp.run()
-    st()
     
     # # first TX segment
     # t = np.linspace(0, 100, 1001) # goes to 100us, samples every 100ns

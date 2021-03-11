@@ -19,36 +19,37 @@ if __name__ == "__main__":
     #                      skip_header=0,
     #                      usecols=(0,1),
     #                      names=True)
-    grad_board = "ocra1"
 
     data = np.loadtxt(sys.argv[1], skiprows=1, delimiter=',')
     data[1:, 0] = data[1:, 0] - data[1, 0] + 1 # remove dead time in the beginning taken up by simulated memory writes
     
     time_us = data[:,0]/122.88
-    tx = data[:,1:5].astype(np.int16)
-    fhdo = data[:,5:9].astype(np.int16)
-    ocra1 = ( (data[:,9:13].astype(np.int32) ^ (1 << 17)) - (1 << 17) ).astype(np.int32)    
-    rx = data[:,14:19].astype(np.uint8)
-    rx_en = rx[:, 4:] # ignore the rate logic, only plot the RX enables
-    io = data[:,19:].astype(np.uint8)    
+    tx = data[:,1:5].astype(np.int16) / 32768
+    # offset binary
+    fhdo = data[:,5:9].astype(np.uint16) / 32768 - 1
+    # 2's complement
+    ocra1 = ( (data[:,9:13].astype(np.int32) ^ (1 << 17)) - (1 << 17) ).astype(np.int32) / 131072
+    gdata = np.hstack([fhdo, ocra1])
+    gdata_nonzero = np.nonzero(gdata.any(0))[0]
+    
+    rx = data[:,14:21].astype(np.uint8)
+    rx_en = rx[:, 5:] # ignore the rate logic, only plot the RX enables
+    io = data[:,21:].astype(np.uint8)
 
     fig, (txs, grads, rxs, ios) = plt.subplots(4, 1, figsize=(12,8), sharex='col')
 
     txs.step(time_us, tx, where='post')
     txs.legend(['tx0 i', 'tx0 q', 'tx1 i', 'tx1 q'])
+    txs.grid(True)
 
-    if grad_board == "ocra1":
-        gdata = ocra1
-        glegends = ['ocra1 x', 'ocra1 y', 'ocra1 z', 'ocra1 z2']
-    elif grad_board == "gpa-fhdo":        
-        gdata = fhdo
-        glegends = ['fhdo x', 'fhdo y', 'fhdo z', 'fhdo z2']
+    glegends = ['fhdo x', 'fhdo y', 'fhdo z', 'fhdo z2', 'ocra1 x', 'ocra1 y', 'ocra1 z', 'ocra1 z2']
 
-    grads.step(time_us, gdata, where='post')
-    grads.legend(glegends)
+    if gdata_nonzero.size != 0:
+        grads.step(time_us, gdata[:, gdata_nonzero], where='post')
+        grads.legend([glegends[k] for k in gdata_nonzero])
 
     rxs.step(time_us, rx_en, where='post')
-    rxs.legend(["rx0 rstn", "rx1 rstn"])
+    rxs.legend(["rx0 en", "rx1 en"])
 
     ios.step(time_us, io, where='post')
     ios.legend(['tx gate', 'rx gate', 'trig out', 'leds'])        
