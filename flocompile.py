@@ -16,7 +16,7 @@ def debug_print(*args, **kwargs):
     pass
 
 def col2buf(col_idx, value):
-    """ Returns a tuple of (buffer indices), (values), (value masks) 
+    """ Returns a tuple of (buffer indices), (values), (value masks)
     A value masks specifies which bits are actually relevant on the output.
     Can accept arrays of values."""
     if col_idx in (1, 2, 3, 4): # TX
@@ -34,7 +34,7 @@ def col2buf(col_idx, value):
         elif grad_board == "ocra1":
             if col_idx in (5, 6, 7, 8):
                 raise RuntimeError("OCRA1 is selected, but you are trying to control GPA-FHDO")
-            grad_chan = col_idx - 9                
+            grad_chan = col_idx - 9
             val_full = value << 2 | 0x00100000 | (grad_chan << 25) | 0x01000000 # always broadcast by default
         else:
             raise ValueError("Unknown grad board")
@@ -60,7 +60,7 @@ def col2buf(col_idx, value):
         buf_idx = 16, # RX_CTRL
         bit_idx = col_idx - 19
         val = value << (8 + bit_idx),
-        mask = 0x1 << (8 + bit_idx),        
+        mask = 0x1 << (8 + bit_idx),
     elif col_idx in (21, 22, 23): # TX/RX gates, external trig
         buf_idx = 15, # GATES_LEDS
         bit_idx = col_idx - 21
@@ -99,7 +99,7 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np
 
     # Input: CSV column, starting from 0 for tx0 i and ending with 21 for leds
     # Output: corresponding buffer index or indices to change
-    
+
     data = np.loadtxt(path, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
     with open(path, 'r') as csvf:
         cols = csvf.readline().strip().split(',')[1:]
@@ -108,7 +108,7 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np
 
     if quick_start:
         # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from the simulator
-        # data[1:, 0] = data[1:, 0] - data[1, 0] + latencies.max() 
+        # data[1:, 0] = data[1:, 0] - data[1, 0] + latencies.max()
         data[1:, 0] = data[1:, 0] - data[1, 0] + 10
 
     # Boolean: compare data offset by one row in time
@@ -116,7 +116,7 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np
 
     changelist = []
     changelist_grad = []
-    
+
     for k, dd in enumerate(data_diff):
         clocktime = data[k + 1, 0]
         dw = np.where(dd)[0] # indices where data changed
@@ -137,7 +137,7 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
      {'tx0_i': ( np.array([100, 102, 304, 506]), np.array([1, 200, 65535, 20000]) ),
       'fhdo_vx': ( np.array([3000, 4500, 5900, 7000]), np.array([1, 2, 55555, 33333]) ),
       'fhdo_vy': ( np.array([10000, 12000, 14000, 16000]), np.array([1, 2, 55555, 33333]) ) }
-    
+
     etc. Same binary format as in the CSV file.
 
     latencies: inherent buffer latencies to take into
@@ -155,7 +155,7 @@ def dict2bin(sd, initial_bufs=np.zeros(FLOCRA_BUFS, dtype=np.uint16), latencies 
 
     changelist = []
     changelist_grad = []
-    
+
     for k, vals in sd.items(): # iterate over dictionary keys
         col_idx = col_arr.index(k)
         changelist_grad_local = []
@@ -186,7 +186,7 @@ def cl2bin(changelist, changelist_grad,
     to control hardware with non-trivial internal timing behaviour
     (currently only the gradient boards). Also accepts non-default initial
     values to program the buffers to."""
-    
+
     # Process the grad changelist, depending on what GPA is being used etc
     # Sort in pairs of changes, because otherwise channels can get mixed up
     changelist_grad_paired = [ [k, m] for k, m in zip(changelist_grad[::2], changelist_grad[1::2]) ]
@@ -214,7 +214,7 @@ def cl2bin(changelist, changelist_grad,
         # else:
         #     grad_vals_old[idx] = grad_vals[idx]
         #     grad_vals[idx] = data # update the last known buffer value
-        
+
         if t == t_last[idx]:
             num_chgs[idx] += 1
             # assume the changes in changelist_grad are paired with LSBs/MSBs matching each other's grad channels stored sequentially,
@@ -229,7 +229,7 @@ def cl2bin(changelist, changelist_grad,
                 # else:
                 #     if data == grad_vals[idx]: # no actual change to buffer output compared to earlier LSB at this timestep
                 #         continue # skip this change
-                    
+
                 # move non-broadcast events back in time, so that synchronisation will be done in ocra1_iface core
                 changelist_grad_shifted.append( (c[0]-num_chgs[idx], c[1], data, c[3]) )
                 num_chgs[idx] += 1
@@ -237,22 +237,22 @@ def cl2bin(changelist, changelist_grad,
                 # don't do anything; currently will cause an error
                 # later since multiple events can't happen at the same
                 # time for GPA-FHDO
-                changelist_grad_shifted.append(c) 
+                changelist_grad_shifted.append(c)
         else:
             if t - t_last[idx] < 24 * (1 + spi_div) + 2: #
                 warnings.warn("Gradient updates are too frequent for selected SPI divider. Missed samples are likely!", FloGradWarning)
 
             # if data == grad_vals[idx]: # no actual change to buffer output
             #     continue # skip this change
-            
+
             t_last[idx] = t
             grad_vals[idx] = data # update the last known buffer value
-            changelist_grad_shifted.append(c)            
+            changelist_grad_shifted.append(c)
             num_chgs = [0, 0]
 
     changelist += changelist_grad_shifted
     changelist.sort(key=sortfn) # sort by time
-    
+
     # Process and combine the change list into discrete sets of operations at each time, i.e. an output list
     def cl2ol(changelist):
         current_bufs = initial_bufs.copy()
@@ -268,8 +268,8 @@ def cl2bin(changelist, changelist_grad,
             buf_time_offsets = 0
             unique_changes.append( [time, ch_idces, current_bufs[ch_idces], buf_time_offsets] )
             change_masks[:] = np.zeros(FLOCRA_BUFS, dtype=np.uint16)
-            changed[:] = np.zeros(FLOCRA_BUFS, dtype=bool)            
-        
+            changed[:] = np.zeros(FLOCRA_BUFS, dtype=bool)
+
         for time, buf, val, mask in changelist:
             if time != current_time:
                 close_timestep(current_time)
@@ -286,24 +286,24 @@ def cl2bin(changelist, changelist_grad,
             val_masked = val & mask
             old_val_unmasked = current_bufs[buf] & ~mask
             new_val = old_val_unmasked | val_masked
-            change_masks[buf] |= mask            
+            change_masks[buf] |= mask
             current_bufs[buf] = new_val
             changed[buf] = True
-            
+
         close_timestep(current_time)
-            
+
         return unique_changes
 
     changes = cl2ol(changelist)
-    
+
     # Process time offsets
     for ch, ch_prev in zip( reversed(changes[1:]), reversed(changes[:-1]) ):
         # does the current timestep need to output more data than can
         # fit into the time gap since the previous timestep?
         timestep = ch[0] - ch_prev[0]
         timediff = ch[1].size - timestep
-        # if timestep < ch[1].size: # not enough time 
-            
+        # if timestep < ch[1].size: # not enough time
+
         if timediff > 0:
             ch_prev[0] -= timediff # move prev. event into the past
             ch_prev[3] = timediff # make prev. event's buffers output in its future
@@ -320,16 +320,16 @@ def cl2bin(changelist, changelist_grad,
     #  buffers that need to be changed,
     #  values to set the buffers to,
     #  the delay until the buffers will output their values]
-    
+
     ### Write out instructions
-    
+
     # Write out initial buffer values
     bdata = []
     addr = 0
     states = initial_bufs
     # reversed order, so that grad board is enabled last of all (to avoid spurious initial transfer)
     for k, ib in enumerate(reversed(initial_bufs)):
-        bdata.append(instb(FLOCRA_BUFS-1-k, k, ib))     
+        bdata.append(instb(FLOCRA_BUFS-1-k, k, ib))
 
     last_buf_time_left = np.zeros(FLOCRA_BUFS, dtype=np.int32)
     buf_time_left = np.zeros(FLOCRA_BUFS, dtype=np.int32)
@@ -337,7 +337,7 @@ def cl2bin(changelist, changelist_grad,
     debug_print("changes:")
     for k in changes:
         debug_print(k)
-    
+
     for event in changes:
         b_instrs = event[1].size
         dtime = event[0]
@@ -388,6 +388,25 @@ def cl2bin(changelist, changelist_grad,
     # Finish sequence
     bdata.append(insta(IFINISH, 0))
     return bdata
-                
+
+CIC_SLOWEST_RATE_NEAREST_POW2 = 1 << np.ceil(np.log2(CIC_SLOWEST_RATE)).astype(int)
+
+def cic_words(rate, set_cic_shift=False):
+    # Calculate the data words to transfer to the CIC for a given rate
+
+    # FLoating-point calculation
+    assert np.all( (CIC_FASTEST_RATE <= rate) & (rate <= CIC_SLOWEST_RATE) ), "RX rate outside valid range"
+    gain_factor_log2 = CIC_STAGES * np.log2( CIC_SLOWEST_RATE_NEAREST_POW2 / rate )
+    gain_shift = np.int32(gain_factor_log2) # rounded down
+    a = (1 << CIC_RATE_DATAWIDTH) | gain_shift
+    b = (0 << CIC_RATE_DATAWIDTH) | rate
+    excess_factor = 2**(gain_factor_log2 - gain_shift)
+    # b = (2 << rate_datawidth) | int(factor_excess * (1 << (rate_datawidth - 1)) ) # TODO: tell Benjamin about assumed 1 - i.e. save a bit for multiplicand by assuming it's between 1 and 2
+
+    if set_cic_shift:
+        return (a, b), excess_factor
+    else:
+        return (b,), excess_factor
+
 if __name__ == "__main__":
     csv2bin("/tmp/flocra.csv")

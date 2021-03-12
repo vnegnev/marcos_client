@@ -55,45 +55,20 @@ STATE_HALT = 8
 
 COUNTER_MAX = 0xffffff
 
+CIC_STAGES = 6 # N: number of CIC stages in the RX CICs
+# diff_delay = 1 # M: differential delay in comb section of CICs
+CIC_RATE_DATAWIDTH = 12 # 12-bit rate/data bus, 2-bit address
+CIC_FASTEST_RATE, CIC_SLOWEST_RATE = 4, 4095 # CIC core settings
+
 def insta(instr, data):
     """ Instruction A: FSM control """
     assert instr in [INOP, IFINISH, IWAIT, ITRIG, ITRIGFOREVER], "Unknown instruction"
     assert (data & COUNTER_MAX) == (data & 0xffffffff), "Data out of range"
     return (instr << 24) | (data & 0xffffff)
-    
+
 def instb(tgt, delay, data):
     """ Instruction B: timed buffered data """
     assert tgt <= 24, "Unknown target buffer"
     assert 0 <= delay <= 255, "Delay out of range"
     assert (data & 0xffff) == (data & 0xffffffff), "Data out of range"
     return (IDATA << 24) | ( (tgt & 0x7f) << 24 ) | ( (delay & 0xff) << 16 ) | (data & 0xffff)
-
-# def set_ocra1(word, channel, broadcast=False, delay=0):
-#     """ Assumes word, channel, delay and broadcast have already been sanitised """
-#     word_full = (word << 2) | 0x00100000 | (channel << 25) | (broadcast << 24)
-#     word_msb, word_lsb = word_full >> 16, word_full & 0xffff
-
-#     instrs = []
-#     instrs.append(instb(GRAD_LSB, word_lsb, delay + 1))
-#     instrs.append(instb(GRAD_MSB, word_msb, delay))
-#     return instrs
-
-
-# def set_gpa_fhdo(word, channel, broadcast=False, delay=0):
-#     """ Assumes word, channel, and delay have already been sanitised """
-#     word_full = word | 0x80000 | (channel << 16) | (broadcast << 24) # 2 channels in the word
-#     word_msb, word_lsb = word_full >> 16, word_full & 0xffff
-
-#     instrs = []
-#     instrs.append(instb(GRAD_LSB, word_lsb, delay + 1))
-#     instrs.append(instb(GRAD_MSB, word_msb, delay))
-#     return instrs
-
-# def set_grad(*args, gb=grad_board, **kwargs):
-#     if gb == "gpa-fhdo":
-#         return set_gpa_fhdo(args, kwargs)
-#     elif gb == "ocra1":
-#         return set_ocra1(args, kwargs)
-#     else:
-#         warnings.warn("Undefined grad board")
-

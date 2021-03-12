@@ -6,7 +6,7 @@
 # and sends it various binaries generated using the flocra client
 # compiler, then compares the simulated hardware output against the
 # expected output.
-# 
+#
 # To run a single test, use e.g.:
 # python -m unittest test_flocra_model.Modeltest.test_many_quick
 
@@ -81,7 +81,7 @@ def set_grad_board(gb):
     gb_changed = True
 
 def restore_grad_board():
-    global gb_orig, gb_changed    
+    global gb_orig, gb_changed
     fc.grad_board = gb_orig
     exp.grad_board = gb_orig
     gb_changed = False
@@ -105,7 +105,7 @@ def compare_csv(fname, sock, proc,
     sock.close()
     proc.wait(1) # wait a short time for simulator to close
 
-    # compare resultant CSV with the reference    
+    # compare resultant CSV with the reference
     if self_ref:
         rdata = np.loadtxt(source_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(flocra_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
@@ -122,7 +122,7 @@ def compare_csv(fname, sock, proc,
             siml = sim.read().splitlines()
         return refl, siml
 
-def compare_dict(source_dict, ref_fname, sock, proc,                 
+def compare_dict(source_dict, ref_fname, sock, proc,
                  initial_bufs=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint16),
                  latencies=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint32),
                  ignore_start_delay=True
@@ -146,7 +146,7 @@ def compare_dict(source_dict, ref_fname, sock, proc,
         siml = sim.read().splitlines()
     # return refl, siml
 
-    ref_csv = os.path.join("csvs", ref_fname + ".csv")    
+    ref_csv = os.path.join("csvs", ref_fname + ".csv")
     if ignore_start_delay:
         rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(flocra_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
@@ -191,7 +191,7 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
         siml = sim.read().splitlines()
     # return refl, siml
 
-    ref_csv = os.path.join("csvs", ref_fname + ".csv")    
+    ref_csv = os.path.join("csvs", ref_fname + ".csv")
     if ignore_start_delay:
         rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(flocra_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
@@ -205,7 +205,7 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
             refl = ref.read().splitlines()
         with open(flocra_sim_csv, "r") as sim:
             siml = sim.read().splitlines()
-        return refl, siml    
+        return refl, siml
 
 class ModelTest(unittest.TestCase):
     """Main test class for general HDL and compiler development/debugging;
@@ -225,7 +225,7 @@ class ModelTest(unittest.TestCase):
 
         warnings.simplefilter("ignore", fc.FloServerWarning)
         # warnings.simplefilter("ignore", fc.FloRemovedInstructionWarning)
-    
+
     def setUp(self):
         # start simulation
         if flocra_sim_fst_dump:
@@ -240,7 +240,7 @@ class ModelTest(unittest.TestCase):
 
         # open socket
         time.sleep(0.05) # give flocra_sim time to start up
-        
+
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((ip_address, port)) # only connect to local simulator
         self.packet_idx = 0
@@ -266,7 +266,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_four_par", self.s, self.p)
         self.assertEqual(refl, siml)
 
-    def test_long_time(self):        
+    def test_long_time(self):
         """ State change on four buffers in parallel """
         max_orig = fc.COUNTER_MAX
         fc.COUNTER_MAX = 0xfff # temporarily reduce max time used by compiler
@@ -288,7 +288,7 @@ class ModelTest(unittest.TestCase):
         """ Quick successive state changes on two buffers, one cycle apart """
         refl, siml = compare_csv("test_two_quick", self.s, self.p)
         self.assertEqual(refl, siml)
-    
+
     def test_two_delays(self):
         """ State changes on two buffers, various delays in between """
         refl, siml = compare_csv("test_two_delays", self.s, self.p)
@@ -298,7 +298,7 @@ class ModelTest(unittest.TestCase):
         """ Quick successive state changes on two buffers, one cycle apart """
         refl, siml = compare_csv("test_three_quick", self.s, self.p)
         self.assertEqual(refl, siml)
-    
+
     def test_three_delays(self):
         """ Successive state changes on three buffers, two cycles apart """
         refl, siml = compare_csv("test_three_delays", self.s, self.p)
@@ -367,7 +367,7 @@ class ModelTest(unittest.TestCase):
                                   ], dtype=np.uint16),
                                   self_ref=False)
         self.assertEqual(refl, siml)
-        
+
     def test_fhd_single(self):
         """Single state change on GPA-FHDO x gradient output, default SPI
         clock divisor; simultaneous change on TX0i"""
@@ -375,7 +375,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_fhd_single", self.s, self.p, **fhd_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_fhd_series(self):
         """Series of state changes on GPA-FHDO x gradient output, default SPI
         clock divisor """
@@ -383,7 +383,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_fhd_series", self.s, self.p, **fhd_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_fhd_multiple(self):
         """A few state changes on GPA-FHDO gradient outputs, default SPI clock divisor"""
         set_grad_board("gpa-fhdo")
@@ -397,14 +397,14 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_fhd_many", self.s, self.p, **fhd_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_fhd_too_fast(self):
         """Two state changes on GPA-FHDO gradient outputs, default SPI clock
         divisor - too fast for the divider, second state change won't
         be applied and server should notice the error
         """
         set_grad_board("gpa-fhdo")
-        
+
         # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
         with self.assertWarns( RuntimeWarning, msg="expected gpa-fhdo error not observed") as cmr:
             refl, siml = compare_csv("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
@@ -412,7 +412,7 @@ class ModelTest(unittest.TestCase):
             self.tearDown()
             self.setUp()
             refl, siml = compare_csv("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
-            
+
         restore_grad_board()
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
@@ -433,10 +433,10 @@ class ModelTest(unittest.TestCase):
         clock divisor
         """
         set_grad_board("ocra1")
-        refl, siml = compare_csv("test_oc1_series", self.s, self.p, **oc1_config) 
+        refl, siml = compare_csv("test_oc1_series", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_oc1_two(self):
         """Two sets of simultaneous state changes on ocra1 gradient outputs,
         default SPI clock divisor
@@ -445,7 +445,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_oc1_two", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_oc1_two_same(self):
         """One set of simultaneous identical state changes on ocra1 gradient
         outputs, then a single change later; default SPI clock divisor
@@ -463,7 +463,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_oc1_four", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_oc1_series_same(self):
         """Several sets of simultaneous state changes on ocra1 gradient
         outputs, with MSBs and LSBs kept similar in a pattern to test
@@ -483,14 +483,14 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_oc1_many", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_oc1_too_fast(self):
         """Two state changes on ocra1 gradient outputs, default SPI clock
         divisor - too fast for the divider, second state change won't
         be applied and server should notice the error
         """
         set_grad_board("ocra1")
-        
+
         # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
         with self.assertWarns( RuntimeWarning, msg="expected ocra1 error not observed") as cmr:
             refl, siml = compare_csv("test_oc1_too_fast", self.s, self.p, self_ref=False, **oc1_config)
@@ -541,7 +541,7 @@ class ModelTest(unittest.TestCase):
              'rx0_rst_n': ( np.array([140, 150, 218, 220]), np.array([1, 0, 1, 0]) ),
              'rx1_rst_n': ( np.array([150, 160, 216, 218]), np.array([1, 0, 1, 0]) ),
              'rx0_en': ( np.array([160, 170, 215, 216]), np.array([1, 0, 1, 0]) ),
-             'rx1_en': ( np.array([170, 180, 214, 215]), np.array([1, 0, 1, 0]) ),             
+             'rx1_en': ( np.array([170, 180, 214, 215]), np.array([1, 0, 1, 0]) ),
              'tx_gate': ( np.array([180, 190, 213, 214]), np.array([1, 0, 1, 0]) ),
              'rx_gate': ( np.array([190, 200, 212, 213]), np.array([1, 0, 1, 0]) ),
              'trig_out': ( np.array([200, 210, 211, 212]), np.array([1, 0, 1, 0]) ),
@@ -579,7 +579,7 @@ class ModelTest(unittest.TestCase):
                           np.array([3, 7, 15, 3, 65532, 14000, 30000])),
              'tx1_q': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
                           np.array([4, 8, 12, 16, 4, 65531, 16000, 35000])),
-             
+
              'ocra1_vx': (np.array([600, 900, 1200, 1500, 1800, 2100, 2400, 2700]),
                           np.array([1, 5, 9, 13, 262143, 262142, 100000, 20000])),
              'ocra1_vy': (np.array([600, 1200, 1500, 1800, 2100, 2400, 2700]),
@@ -601,7 +601,7 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_dict(d, "test_oc1_two_dict", self.s, self.p, **oc1_config)
         restore_grad_board()
         self.assertEqual(refl, siml)
-        
+
     def test_single_expt(self):
         """ Basic state change on a single buffer. Experiment version"""
         set_grad_board("gpa-fhdo")
@@ -656,7 +656,6 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    @unittest.skip("Various other bugs to fix first")
     def test_uneven_sparse_expt_oc1(self):
         """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
         d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
@@ -670,8 +669,8 @@ class ModelTest(unittest.TestCase):
              'grad_vz': (np.array([15, 23,     65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
              'grad_vz2': (np.array([15,     43, 65, 77]), np.array([-1, 1, 0.5, -0.5, 0])),
 
-             'rx0_rst_n': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
-             'rx1_rst_n': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
+             'rx0_en': (np.array([7,12,  30,40,  80,90]), np.array([1,0, 1,0, 1,0])),
+             'rx1_en': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
              }
 
         set_grad_board("ocra1")
@@ -680,5 +679,14 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
 
+    def test_cic_shift_expt(self):
+        """ Test the experiment code to program the open-source (non-Xilinx) variant of the CIC filter """
+        # d = {'tx0': ( np.array([10, 15]), np.array([0.5, 0]) )}
+        set_grad_board("ocra1")
+        expt_args = {'rx_t': 0.5, 'set_cic_shift': True}
+        refl, siml = compare_expt_dict({}, "test_cic_shift_expt", self.s, self.p, **expt_args)
+        restore_grad_board()
+        self.assertEqual(refl, siml)
+
 if __name__ == "__main__":
-    unittest.main()        
+    unittest.main()

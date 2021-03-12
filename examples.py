@@ -23,11 +23,11 @@ def trapezoid(plateau_a, total_t, ramp_t, ramp_pts, total_t_end_to_end=True, bas
     a = np.hstack([rise_ramp, np.flip(rise_ramp)[1:]])
     return t, a
 
-def grad_echo(trs=21, plot_rx=False, init_gpa=False, 
+def grad_echo(trs=21, plot_rx=False, init_gpa=False,
               dbg_sc=0.5, # set to 0 to avoid 2nd RF debugging pulse, otherwise amp between 0 or 1
               lo_freq=0.1, # MHz
               rf_amp=1, # 1 = full-scale
-              
+
               slice_amp=0.4, # 1 = gradient full-scale
               phase_amp=0.3, # 1 = gradient full-scale
               readout_amp=0.8, # 1 = gradient full-scale
@@ -43,7 +43,7 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
     ## All times are in the context of a single TR, starting at time 0
 
     phase_amps = np.linspace(phase_amp, -phase_amp, trs)
-    
+
     rf_tstart = 100 # us
     rf_tend = rf_tstart + rf_duration # us
 
@@ -52,19 +52,19 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
     phase_tstart = rf_tend + phase_delay
     readout_tstart = phase_tstart
     readout_duration = phase_duration*2
-    
+
     rx_tstart = readout_tstart + trap_ramp_duration # us
     rx_tend = readout_tstart + readout_duration - trap_ramp_duration # us
-    
+
     tx_gate_pre = 2 # us, time to start the TX gate before the RF pulse begins
     tx_gate_post = 1 # us, time to keep the TX gate on after the RF pulse ends
-    
+
     tr_total_time = readout_tstart + readout_duration + tr_wait + 7000 # start-finish TR time
 
     def grad_echo_tr(tstart, pamp):
         gvxt, gvxa = trapezoid(slice_amp, slice_duration, trap_ramp_duration, trap_ramp_pts)
         gvyt, gvya = trapezoid(pamp, phase_duration, trap_ramp_duration, trap_ramp_pts)
-        
+
         gvzt1 = trapezoid(readout_amp, readout_duration/2, trap_ramp_duration, trap_ramp_pts)
         gvzt2 = trapezoid(-readout_amp, readout_duration/2, trap_ramp_duration, trap_ramp_pts)
         gvzt = np.hstack([gvzt1[0], gvzt2[0] + readout_duration/2])
@@ -75,8 +75,8 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
             # second tx0 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,   rx_tcentre - 10, rx_tcentre + 10]) + tstart,
                      np.array([rf_amp,0,  dbg_sc*(1 + 0.5j),0]) ),
-            
-            'tx1': ( np.array([rx_tstart + 15, rx_tend - 15]) + tstart, np.array([dbg_sc * pamp * (1 + 0.5j), 0]) ),            
+
+            'tx1': ( np.array([rx_tstart + 15, rx_tend - 15]) + tstart, np.array([dbg_sc * pamp * (1 + 0.5j), 0]) ),
             'grad_vx': ( gvxt + tstart + slice_tstart, gvxa ),
             'grad_vy': ( gvyt + tstart + phase_tstart, gvya),
             'grad_vz': ( gvzt + tstart + readout_tstart, gvza),
@@ -97,22 +97,21 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
     rxd, msgs = expt.run()
     expt.close_server(True)
 
-    rxr = rxd[4]['run_seq']
     if plot_rx:
-        plt.plot( np.array(rxr['rx0_i'], dtype=np.int32) )
-        plt.plot( np.array(rxr['rx0_q'], dtype=np.int32) )
-        plt.plot( np.array(rxr['rx1_i'], dtype=np.int32) )
-        plt.plot( np.array(rxr['rx1_q'], dtype=np.int32) )        
+        plt.plot( rxd['rx0'].real )
+        plt.plot( rxd['rx0'].imag )
+        plt.plot( rxd['rx1'].real )
+        plt.plot( rxd['rx1'].imag )
         plt.show()
 
 def radial(trs=36, plot_rx=False, init_gpa=False):
     ## All times are relative to a single TR, starting at time 0
     lo_freq = 0.2 # MHz
     rf_amp = 0.5 # 1 = full-scale
-    
+
     G = 0.5 # Gx = G cos (t), Gy = G sin (t)
     angles = np.linspace(0, 2*np.pi, trs) # angle
-    
+
     grad_tstart = 0 # us
     rf_tstart = 5 # us
     rf_tend = 50 # us
@@ -143,13 +142,13 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
             'tx_gate' : ( np.array([rf_tstart - tx_gate_pre, rf_tend + tx_gate_post]),
                           np.array([1, 0]) )
             }
-        
+
         for k, v in value_dict.items():
             # v for read, value_dict[k] for write
             value_dict[k] = (v[0] + tstart, v[1])
 
         return value_dict
-    
+
     expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa)
 
     tr_t = 20 # start the first TR at 20us
@@ -160,10 +159,11 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
     rxd, msgs = expt.run()
     # expt.close_server(True)
 
-    rxr = rxd[4]['run_seq']
     if plot_rx:
-        plt.plot( np.array(rxr['rx0_i'], dtype=np.int32) )
-        plt.plot( np.array(rxr['rx0_q'], dtype=np.int32) )
+        plt.plot( rxd['rx0'].real )
+        plt.plot( rxd['rx0'].imag )
+        # plt.plot( rxd['rx1'].real )
+        # plt.plot( rxd['rx1'].imag )
         plt.show()
 
 if __name__ == "__main__":
@@ -172,5 +172,5 @@ if __name__ == "__main__":
     # import cProfile
     # cProfile.run('test_grad_echo_loop()')
     # for k in range(100):
-    grad_echo(lo_freq=1, trs=2, plot_rx=True, init_gpa=True, dbg_sc=1)
-    # radial(trs=100, init_gpa=True)
+    # grad_echo(lo_freq=1, trs=2, plot_rx=True, init_gpa=True, dbg_sc=1)
+    radial(trs=100, init_gpa=True, plot_rx=True)
