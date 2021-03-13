@@ -66,7 +66,8 @@ class Experiment:
                  initial_wait=1, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least 1us
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
                  fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data based on rate
-                 set_cic_shift=False # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
+                 set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
+                 flush_rx=False # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always clear them before running a sequence.
                  ):
 
         # create socket early so that destructor works
@@ -121,6 +122,7 @@ class Experiment:
 
         self._fix_cic_scale = fix_cic_scale
         self._set_cic_shift = set_cic_shift
+        self._flush_rx = flush_rx
 
     def __del__(self):
         self._s.close()
@@ -286,6 +288,9 @@ class Experiment:
         if self._seq_compiled is False:
             self.compile()
 
+        if self._flush_rx:
+            sc.command({'flush_rx': 0}, self._s)
+
         rx_data, msgs = sc.command({'run_seq': self._machine_code.tobytes()}, self._s)
 
         rxd = rx_data[4]['run_seq']
@@ -296,14 +301,14 @@ class Experiment:
         rx1_norm_factor = self._rx0_cic_factor / (1 << 24)
 
         try:
-            rxd_iq['rx0'] = rx0_norm_factor * ( np.array(rxd['rx0_i'], dtype=np.int32).astype(float) + \
-                             1j * np.array(rxd['rx0_q'], dtype=np.int32).astype(float) )
+            rxd_iq['rx0'] = rx0_norm_factor * ( np.array(rxd['rx0_i']).astype(np.int32).astype(float) + \
+                             1j * np.array(rxd['rx0_q']).astype(np.int32).astype(float) )
         except (KeyError, TypeError):
             pass
 
         try:
-            rxd_iq['rx1'] = rx1_norm_factor * ( np.array(rxd['rx1_i'], dtype=np.int32).astype(float) + \
-                             1j * np.array(rxd['rx1_q'], dtype=np.int32).astype(float) )
+            rxd_iq['rx1'] = rx1_norm_factor * ( np.array(rxd['rx1_i']).astype(np.int32).astype(float) + \
+                             1j * np.array(rxd['rx1_q']).astype(np.int32).astype(float) )
         except (KeyError, TypeError):
             pass
 
@@ -316,6 +321,11 @@ class Experiment:
 
 def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
 
+    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz, fix_cic_scale=False, set_cic_shift=False, flush_rx=True)
+    tr_t = 0
+    tr_period = rx_time + rx_padding
+    rx_lengths = []
+
     def single_pulse_tr(tstart, rx_period=20):
         if rf_steps:
             tx_shape = np.array([0, 0.2, 0.4, 0.6, 0.8, 1, 0.8, 0.6, 0.4, 0.2, 0]) * rf_amp
@@ -325,10 +335,19 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
             tx_times = np.array([0, 1]) * (rx_time - 2*rx_padding)
         tx_seq = ( tstart + 5 + rx_padding + tx_times, tx_shape )
         rx_seq = ( tstart + 5 + np.array([0, rx_time]), np.array([1, 0]) )
-        rate_seq = ( tstart + np.array([100]) / fpga_clk_freq_MHz,
-                     np.array([rx_period]) )
-        rate_en_seq = ( tstart + np.array([ 100, 101]) / fpga_clk_freq_MHz,
-                        np.array([1, 0]) )
+
+        # Rate adjustment
+        set_cic_shift = expt._set_cic_shift
+        rx_words, _ = fc.cic_words(rx_period, set_cic_shift)
+        rx_wait = 100
+        rxr_st = tstart + rx_wait
+        wds = len(rx_words)
+        ar0 = np.arange(wds, dtype=int)
+        ar1 = np.arange(wds + 1, dtype=int)
+        ow = np.ones(wds + 1, dtype=int)
+        ow[-1] = 0
+        rate_seq = ( tstart + (rx_wait + ar0) / fpga_clk_freq_MHz, np.array(rx_words) )
+        rate_en_seq = ( tstart + (rx_wait + ar1) / fpga_clk_freq_MHz, ow )
 
         value_dict = {
             'tx0': tx_seq, 'tx1': tx_seq,
@@ -339,10 +358,6 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
             }
         return value_dict
 
-    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz, fix_cic_scale=False)
-    tr_t = 0
-    tr_period = rx_time + rx_padding
-    rx_lengths = []
     for rt in rx_periods:
         expt.add_flodict( single_pulse_tr( tr_t , rt) )
         tr_t += tr_period
@@ -411,6 +426,7 @@ if __name__ == "__main__":
                     rx_time=60,
                     rx_padding=20,
                     # rx_periods = np.ones(10, dtype=int)*30,
+                    # rx_periods=np.arange(4, 400, 1),
                     rx_periods=np.arange(4, 400, 1),
                     # rx_periods=np.arange(10, 400, 1),
                     plot_rx=True)
