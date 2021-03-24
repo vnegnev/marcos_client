@@ -356,6 +356,11 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
             'rx0_rate': rate_seq, 'rx1_rate': rate_seq,
             'rx0_rate_valid': rate_en_seq, 'rx1_rate_valid': rate_en_seq,
             }
+
+        # if rx_period % 2:
+        #     value_dict.pop('rx0_rate_valid', None)
+        #     value_dict.pop('rx1_rate_valid', None)
+
         return value_dict
 
     for rt in rx_periods:
@@ -371,6 +376,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
 
     # rx0_mag = np.abs(rxd['rx0'])
     rx1_mag = np.abs(rxd['rx1'])
+    plt.plot(rx1_mag);plt.show()
 
     pulse_means = []
 
