@@ -207,13 +207,13 @@ class Experiment:
 
         return intdict
 
-    def add_intdict(self, seq_intdict):
-        """ Add an integer-format dictionary to the sequence """
+    def add_intdict(self, seq_intdict, append=True):
+        """ Add an integer-format dictionary to the sequence, or replace the old one """
         if self._seq is None:
             self._seq = {}
 
         for name, sb in seq_intdict.items():
-            if name in self._seq.keys():
+            if name in self._seq.keys() and append:
                 a, b = self._seq[name]
                 self._seq[name] = ( np.append(a, sb[0]), np.append(b, sb[1]) )
             else:
