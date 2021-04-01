@@ -81,6 +81,12 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
         gvza = np.hstack([gvzt1[1], gvzt2[1]])
 
         rx_tcentre = (rx_tstart + rx_tend) / 2
+
+        if grad_board == "gpa-fhdo":
+            gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 0.2 Msps, so 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra 0.1 for a safety margin)
+            gvyt = gvyt + gpa_fhdo_offset # can't use += because of casting rules
+            gvzt = gvzt + 2*gpa_fhdo_offset
+
         value_dict = {
             # second tx0 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,   rx_tcentre - 10, rx_tcentre + 10]) + tstart,
@@ -92,6 +98,7 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
             'grad_vz': ( gvzt + tstart + readout_tstart, gvza),
             'rx0_en': ( np.array([rx_tstart, rx_tend]) + tstart, np.array([1, 0]) ),
             'rx1_en': ( np.array([rx_tstart, rx_tend]) + tstart, np.array([1, 0]) ), # acquire on RX1 for example too
+            'rx_gate': ( np.array([rx_tstart, rx_tend]) + tstart, np.array([1, 0]) ),
             'tx_gate': ( np.array([rf_tstart - tx_gate_pre, rf_tend + tx_gate_post]) + tstart, np.array([1, 0]) )
         }
 
@@ -106,6 +113,7 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
 
     rxd, msgs = expt.run()
     expt.close_server(True)
+    expt._s.close() # close socket
 
     if plot_rx:
         plt.plot( rxd['rx0'].real )
@@ -250,7 +258,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
             global_t += echo_duration
 
             if grad_board == "gpa-fhdo":
-                gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 200 ksps, so 5us / 3.1 ; extra 0.1 for a safety margin)
+                gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 0.2 Msps, so 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra 0.1 for a safety margin)
                 phase_grad_t = phase_grad_t + gpa_fhdo_offset # can't use += because of casting rules
                 slice_grad_t = slice_grad_t + 2*gpa_fhdo_offset
 
@@ -270,6 +278,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
 
     rxd, msgs = expt.run()
     expt.close_server(True)
+    expt._s.close() # close socket
 
     if plot_rx:
         plt.plot( rxd['rx0'].real )
@@ -302,16 +311,27 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
         dbg_sc=0.01
         gx = G * np.cos(th)
         gy = G * np.sin(th)
+
+
+        if grad_board == "gpa-fhdo":
+            gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 0.2 Msps, so 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra 0.1 for a safety margin)
+            grady_tstart = grad_tstart + gpa_fhdo_offset # can't use += because of casting rules
+            gradz_tstart = grad_tstart + 2*gpa_fhdo_offset
+        else:
+            grady_tstart, gradz_tstart = grad_tstart, grad_tstart
+
         value_dict = {
             # second tx0 pulse and tx1 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,    rx_tstart + 15, rx_tend - 15]),
                      np.array([rf_amp, 0,    dbg_sc * (gx+gy*1j), 0]) ),
             'tx1': ( np.array([rx_tstart + 15, rx_tend - 15]), np.array([dbg_sc * (gx+gy*1j), 0]) ),
-            'grad_vz': ( np.array([grad_tstart]),
+            'grad_vz': ( np.array([gradz_tstart]),
                          np.array([gx]) ),
-            'grad_vy': ( np.array([grad_tstart]),
+            'grad_vy': ( np.array([grady_tstart]),
                          np.array([gy]) ),
             'rx0_en' : ( np.array([rx_tstart, rx_tend]),
+                            np.array([1, 0]) ),
+            'rx_gate' : ( np.array([rx_tstart, rx_tend]),
                             np.array([1, 0]) ),
             'tx_gate' : ( np.array([rf_tstart - tx_gate_pre, rf_tend + tx_gate_post]),
                           np.array([1, 0]) )
@@ -331,7 +351,8 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
         tr_t += tr_total_time
 
     rxd, msgs = expt.run()
-    # expt.close_server(True)
+    expt.close_server(True)
+    expt._s.close() # close socket
 
     if plot_rx:
         plt.plot( rxd['rx0'].real )
@@ -346,8 +367,8 @@ if __name__ == "__main__":
     # import cProfile
     # cProfile.run('test_grad_echo_loop()')
     # for k in range(100):
-    # grad_echo(lo_freq=1, trs=2, plot_rx=True, init_gpa=True, dbg_sc=1)
-    # radial(trs=100, init_gpa=True, plot_rx=True)
+    grad_echo(lo_freq=1, trs=2, plot_rx=True, init_gpa=True, dbg_sc=1)
+    radial(trs=100, init_gpa=True, plot_rx=True)
     turbo_spin_echo(lo_freq=0.2,
                     trs=2, echos_per_tr=6,
                     rf_amp=0.7,
