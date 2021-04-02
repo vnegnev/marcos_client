@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# 
+#
 # Classes to handle GPA initialisation, calibration and communication
 #
 # They need to at least implement the following methods:
@@ -56,11 +56,11 @@ class OCRA1:
             self.spi_div = 63 # max value, < 100 ksps
 
         # bind function from Experiment class, or replace with something else for debugging
-        self.server_command = server_command_f 
+        self.server_command = server_command_f
 
         # Default calibration settings for all channels: linear transformation for now
         self.cal_values = [ (1,0), (1,0), (1,0), (1,0) ]
-        
+
         self.bin_config = {
             'initial_bufs': np.array([
                 # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
@@ -99,7 +99,7 @@ class OCRA1:
             self.server_command({'direct': 0x01000000 | (iw & 0xffff)})
 
         # restore main grad ctrl word to respond to LSB or MSB changes
-        self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (1 << 9)})        
+        self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (1 << 9)})
 
     def write_dac(self, channel, value, gated_writes=True):
         """gated_writes: if the caller knows that flocra will already be set
@@ -110,7 +110,7 @@ class OCRA1:
         times (for a timed flocra sequence, the buffers either update
         simultaneously or only a single one updates at a time to save
         instructions).
-        """        
+        """
         assert 0, "Not yet written, sorry!"
 
     def read_adc(self, channel, value):
@@ -147,8 +147,8 @@ class GPAFHDO:
         self.server_command = server_command_f
 
         # TODO: will this ever need modification?
-        self.grad_channels = 4 
-        
+        self.grad_channels = 4
+
         self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
         # initialize gpa fhdo calibration with ideal values
         # self.dac_values = np.array([0x7000, 0x8000, 0x9000])
@@ -212,25 +212,25 @@ class GPAFHDO:
         """
         if gated_writes:
             update_on_msb_writes(True)
-        
+
         self.server_command({'direct': 0x02000000 | (0x0008 | channel) }) # MSBs
         self.server_command({'direct': 0x01000000 | int(value) }) # MSBs
-        
+
         # restore main grad ctrl word to respond to LSB or MSB changes
         if gated_writes:
             update_on_msb_writes(False)
-        
+
     def read_adc(self, channel, gated_writes=True):
         """ see write_dac docstring """
         if gated_writes:
-            update_on_msb_writes(True)        
+            update_on_msb_writes(True)
         assert False, "TODO: CONTINUE HERE"
         self.server_command({'grad_dir': 0x40c00000 | (channel<<18)}) # ADC data transfer
         r, s = self.server_command({'grad_adc': 1}) # ADC data transfer
 
         # restore main grad ctrl word to respond to LSB or MSB changes
         if gated_writes:
-            update_on_msb_writes(False)        
+            update_on_msb_writes(False)
         return r[4]['grad_adc']
 
     def expected_adc_code_from_dac_code(self, dac_code):
@@ -257,9 +257,20 @@ class GPAFHDO:
     def ampere_to_dac_code(self, ampere):
         v_ref = 2.5
         dac_code = np.round( (ampere / self.gpa_current_per_volt + v_ref)/5 * 0xffff ).astype(int)
-        return dac_code    
+        return dac_code
 
     def calibrate(self,
+                  max_current = 2,
+                  num_calibration_points = 10,
+                  gpa_current_per_volt = 3.75,
+                  averages=4,
+                  settle_time=0.001, # ms after each write
+                  plot=False):
+
+        st()
+
+    ## VN: commenting out the old calibration routine for now - can re-introduce it later
+    def calibrate_old(self,
                   max_current = 2,
                   num_calibration_points = 10,
                   gpa_current_per_volt = 3.75,
@@ -271,7 +282,7 @@ class GPAFHDO:
         be adapted to the accuracy needed.
         """
         self.update_on_msb_writes(True)
-        
+
         self.gpa_current_per_volt = gpa_current_per_volt
         self.dac_values = np.round(np.linspace(self.ampere_to_dac_code(-max_current),self.ampere_to_dac_code(max_current),num_calibration_points))
         self.dac_values = self.dac_values.astype(int)
@@ -284,9 +295,9 @@ class GPAFHDO:
             for k, dv in enumerate(self.dac_values):
                 self.write_dac(channel,dv, False)
                 time.sleep(settle_time) # wait 1ms to settle
-                
+
                 self.read_adc(channel) # dummy read
-                for m in range(averages): 
+                for m in range(averages):
                     adc_values[k][m] = self.read_adc(channel)
                 self.gpaCalValues[channel][k] = adc_values.sum(1)[k]/averages
                 gpaCalRatios[k] = self.gpaCalValues[channel][k]/self.expected_adc_code_from_dac_code(dv)
@@ -310,7 +321,7 @@ class GPAFHDO:
         # convert key from user-facing dictionary to flocompile format
         vstr = user_key.split('_')[1]
         ch_list = ['vx', 'vy', 'vz', 'vz2']
-        return "fhdo_" + vstr, ch_list.index(vstr)        
+        return "fhdo_" + vstr, ch_list.index(vstr)
 
     def float2bin(self, grad_data, channel=0):
         # Not 2's complement - 0x0 word is ~0V (-10A), 0xffff is ~+5V (+10A)

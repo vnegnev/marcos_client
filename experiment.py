@@ -60,12 +60,13 @@ class Experiment:
                  seq_csv=None,
                  rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
                  grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
+                 gpa_fhdo_offset_time=0, # when GPA-FHDO is used, offset the Y, Z and Z2 gradient times by 1x, 2x and 3x this value to emulate 'simultaneous' updates
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
                  initial_wait=1, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least 1us
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
-                 fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data based on rate
+                 fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
                  set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
                  flush_rx=False # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always clear them before running a sequence.
                  ):
@@ -102,8 +103,10 @@ class Experiment:
         assert grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
         if grad_board == 'ocra1':
             gradb_class = gb.OCRA1
+            self._gpa_fhdo_offset_time = 0
         else:
             gradb_class = gb.GPAFHDO
+            self._gpa_fhdo_offset_time = gpa_fhdo_offset_time
         self.gradb = gradb_class(self.server_command, grad_max_update_rate)
 
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
@@ -186,6 +189,13 @@ class Experiment:
                 keyb, channel = self.gradb.key_convert(key)
                 keybin = keyb, # tuple
                 valbin = self.gradb.float2bin(vals, channel),
+
+                # hack to de-synchronise GPA-FHDO outputs, to give the
+                # user the illusion of being able to output on several
+                # channels in parallel
+                if self._gpa_fhdo_offset_time:
+                    tbin = times_us(times + channel*self._gpa_fhdo_offset_time + self._initial_wait)
+
             elif key in ['rx0_rate', 'rx1_rate']:
                 keybin = key,
                 valbin = vals.astype(np.uint16),
@@ -249,7 +259,7 @@ class Experiment:
                        'lo2_rst': ( np.array([tstart, tstart + 1]), np.array([1, 0]) )
                        }
 
-        # Set CIC decimatino rate and internal shift, if necessary, and calculate CIC scale correction
+        # Set CIC decimation rate and internal shift, if necessary, and calculate CIC scale correction
         rx0_words, self._rx0_cic_factor = fc.cic_words(self._rx_divs[0], self._set_cic_shift)
         rx1_words, self._rx1_cic_factor = fc.cic_words(self._rx_divs[1], self._set_cic_shift)
         if not self._fix_cic_scale: # clear the correction factor
