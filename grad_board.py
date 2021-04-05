@@ -35,7 +35,8 @@
 # TODO: actually use class inheritance here, instead of two separate classes
 
 import numpy as np
-import time
+from numpy.polynomial import Polynomial
+import time, warnings
 import matplotlib.pyplot as plt
 import local_config as lc
 
@@ -118,7 +119,7 @@ class OCRA1:
 
     def calibrate(self):
         # Fill more in here
-        pass
+        st()
 
     def key_convert(self, user_key):
         # convert key from user-facing dictionary to flocompile format
@@ -143,23 +144,34 @@ class GPAFHDO:
         if self.spi_div > 63:
             self.spi_div = 63 # max value, < 100 ksps
 
+        self.adc_spi_div = 30 # slow down when ADC transfers are being done
+
         # bind function from Experiment class, or replace with something else for debugging
         self.server_command = server_command_f
 
         # TODO: will this ever need modification?
         self.grad_channels = 4
 
-        self.gpa_current_per_volt = 3.75 # default value, will be updated by calibrate_gpa_fhdo
+        # try to get from local_config.py
+        try:
+            self.gpa_current_per_volt = lc.gpa_fhdo_current_per_volt
+        except AttributeError:
+            self.gpa_current_per_volt = 2.5 # if it doesn't match your grad board, add to your local_config.py
+
         # initialize gpa fhdo calibration with ideal values
         # self.dac_values = np.array([0x7000, 0x8000, 0x9000])
         # self.gpaCalValues = np.ones((self.grad_channels,self.dac_values.size))
-        self.dac_values = np.array([0x0, 0xffff])
-        self.gpaCalValues = np.tile(self.expected_adc_code_from_dac_code(self.dac_values), (self.grad_channels, 1))
+        # self.dac_values = np.array([0x0, 0xffff])
+        # self.gpaCalValues = np.tile(self.expected_adc_code_from_dac_code(self.dac_values), (self.grad_channels, 1))
+
+        self.gpaCal = []
+        for k in range(self.grad_channels):
+            self.gpaCal.append( Polynomial([0, 1]) ) # polynomials for calibration
 
         self.bin_config = {
             'initial_bufs': np.array([
                 # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
-                # strobe for both LSB and LSB, reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
+                # strobe for both MSB and LSB, reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
                 (1 << 9) | (1 << 8) | (self.spi_div << 2) | 2,
                 0, 0,
                 0, 0,
@@ -185,7 +197,8 @@ class GPAFHDO:
         # configure main grad ctrl word first, in particular switch it to update the serialiser strobe only in response to LSB changes;
         # gpa_fhdo_iface core has no reset, so no need to strobe it unlike for ocra1
         # (flocra buffer address = 0, 8 MSBs of the 32-bit word)
-        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (0 << 9)})
+
+        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.adc_spi_div << 2) | (0 << 8) | (0 << 9)})
 
         for iw in init_words:
             # direct commands to grad board; send MSBs then LSBs
@@ -195,45 +208,53 @@ class GPAFHDO:
         # restore main grad ctrl word to respond to LSB or MSB changes
         self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (1 << 9)})
 
-    def update_on_msb_writes(self, upd):
+    def update_on_msb_writes(self, upd, spi_div=None):
+        if spi_div is None:
+            spi_div = self.spi_div
         """upd: bool; set to True for default mode, False when direct writes
-        are being done"""
-        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (upd << 9)})
+        are being done. As a side effect, always sets the SPI divisor."""
+        self.server_command({'direct': 0x00000000 | (2 << 0) | (spi_div << 2) | (0 << 8) | (upd << 9)})
 
     def write_dac(self, channel, value, gated_writes=True):
         """gated_writes: if the caller knows that flocra will already be set
         to send data to the serialiser only on LSB updates, this can
-        be set to False. However if it's incorrectly set to False,
-        there may be spurious writes to the serialiser in direct mode
-        as the MSBs and LSBs are output by the buffers at different
-        times (for a timed flocra sequence, the buffers either update
-        simultaneously or only a single one updates at a time to save
-        instructions).
+        be set to False to avoid unnecessary server commands. However
+        if it's incorrectly set to False, there may be spurious writes
+        to the serialiser, because in direct DAC write mode (which
+        this function uses) the MSBs and LSBs are output by the
+        buffers at different times (for a timed flocra sequence, the
+        buffers either update simultaneously or only a single one
+        updates at a time to save instructions) and a spurious update
+        with only one 16b block changed could be sent. Leave it on
+        True if unsure.
         """
         if gated_writes:
-            update_on_msb_writes(True)
+            self.update_on_msb_writes(False)
 
         self.server_command({'direct': 0x02000000 | (0x0008 | channel) }) # MSBs
-        self.server_command({'direct': 0x01000000 | int(value) }) # MSBs
+        self.server_command({'direct': 0x01000000 | int(value) }) # LSBs
 
         # restore main grad ctrl word to respond to LSB or MSB changes
         if gated_writes:
-            update_on_msb_writes(False)
+            self.update_on_msb_writes(True)
 
     def read_adc(self, channel, gated_writes=True):
-        """ see write_dac docstring """
+        """ see write_dac docstring
+        Assumes SPI divisor and DAC/ADC settings have already been initialised through init_hw() at some point"""
         if gated_writes:
-            update_on_msb_writes(True)
-        assert False, "TODO: CONTINUE HERE"
-        self.server_command({'grad_dir': 0x40c00000 | (channel<<18)}) # ADC data transfer
-        r, s = self.server_command({'grad_adc': 1}) # ADC data transfer
+            self.update_on_msb_writes(False, self.adc_spi_div)
+
+        adc_word = 0x40c00000 | (channel << 18)
+        self.server_command({'direct': 0x02000000 | (adc_word >> 16) }) # MSBs
+        self.server_command({'direct': 0x01000000 }) # LSBs
+        rd, _ = self.server_command({'regrd': 5})
 
         # restore main grad ctrl word to respond to LSB or MSB changes
         if gated_writes:
-            update_on_msb_writes(False)
-        return r[4]['grad_adc']
+            self.update_on_msb_writes(True, self.spi_div)
+        return rd[4]['regrd'] & 0xffff # lower 16 bits of flocra reg 5
 
-    def expected_adc_code_from_dac_code(self, dac_code):
+    def expected_adc_code_from_dac_code_old(self, dac_code):
         """
         a helper function for calibrate_gpa_fhdo(). It calculates the expected adc value for a given dac value if every component was ideal.
         The dac codes that pulseq generates should be based on this ideal assumption. Imperfections will be automatically corrected by calibration.
@@ -244,30 +265,109 @@ class GPAFHDO:
         r_shunt = 0.2
         adc_voltage = gpa_current*r_shunt+v_ref
         adc_gain = 4.096*1.25   # ADC range register setting has to match this
-        adc_code = np.round(adc_voltage/adc_gain * 0xffff).astype(np.uint16)
+        adc_code = adc_voltage/adc_gain * 0xffff
         #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
         return adc_code
 
-    def calculate_corrected_dac_code(self,channel,dac_code):
+    def grad2adc(self, grad_vals):
+        """ Calculate expected ideal ADC code for a given grad value ( i.e. [-1, 1]) as input """
+        v_ref = 2.5
+        gpa_current = self.grad2amp(grad_vals)
+        r_shunt = 0.2
+        adc_voltage = gpa_current*r_shunt+v_ref
+        adc_gain = 4.096*1.25   # ADC range register setting has to match this
+        adc_code = adc_voltage/adc_gain * 0xffff
+        #print('DAC code {:d}, DAC voltage {:f}, GPA current {:f}, ADC voltage {:f}, ADC code {:d}'.format(dac_code,dac_voltage,gpa_current,adc_voltage,adc_code))
+        return adc_code
+
+    def adc2grad(self, adc_val):
+        """ Calculate expected grad value to produce an observed ADC code """
+        v_ref = 2.5
+        r_shunt = 0.2
+        adc_gain = 4.096*1.25   # ADC range register setting has to match this
+        adc_voltage = adc_val * adc_gain / 0xffff
+        gpa_current = (adc_voltage - v_ref) / r_shunt
+        return self.amp2grad(gpa_current)
+
+    def calculate_corrected_dac_code_old(self,channel,dac_code):
         """
         calculates the correction factor for a given dac code by doing linear interpolation on the data points collected during calibration
         """
         return np.round( np.interp(self.expected_adc_code_from_dac_code(dac_code), self.gpaCalValues[channel], self.dac_values) ).astype(np.uint32)
 
-    def ampere_to_dac_code(self, ampere):
-        v_ref = 2.5
-        dac_code = np.round( (ampere / self.gpa_current_per_volt + v_ref)/5 * 0xffff ).astype(int)
-        return dac_code
+    def amp2grad(self, ampere):
+        """ Calculate ideal [-1,1] gradient value required for a particular current output """
+        v_ref = 2.5 # nominal midpoint of DAC output
+        v_max = 5 # maximum DAC output voltage
+        # dac_code = np.round( (ampere / self.gpa_current_per_volt + v_ref)/5 * 0xffff ).astype(int)
+        # return dac_code
+        return ampere / ( self.gpa_current_per_volt * (v_max - v_ref) ) # full-scale grad val is +/- 1
+
+    def grad2amp(self, grad_vals):
+        """ Reverse of amp2grad() """
+        v_ref = 2.5 # nominal midpoint of DAC output
+        v_max = 5 # maximum DAC output voltage
+        return grad_vals * ( self.gpa_current_per_volt * (v_max - v_ref) ) # full-scale grad val is +/- 1
 
     def calibrate(self,
-                  max_current = 2,
-                  num_calibration_points = 10,
-                  gpa_current_per_volt = 3.75,
-                  averages=4,
+                  channels=[0,1,2,3],
+                  max_current=5,
+                  num_calibration_points=20,
+                  # gpa_current_per_volt=3.75,
+                  averages=5,
                   settle_time=0.001, # ms after each write
+                  poly_degree=3, # cubic by default, can go higher/lower if desired
+                  test_cal=False, # Purely for debugging
                   plot=False):
 
-        st()
+        for chan in channels:
+            grad_vals = np.linspace(self.amp2grad(-max_current),
+                                    self.amp2grad(max_current),
+                                    num_calibration_points )
+            dac_vals = self.float2bin(grad_vals, cal=test_cal)
+            adc_vals = np.zeros_like(grad_vals)
+
+            for k, dv in enumerate(dac_vals):
+                self.write_dac(chan, dv)
+                # time.sleep(0.001) # 1ms
+                self.read_adc(chan) # dummy
+                time.sleep(0.001) # 1ms
+                for m in range(averages):
+                    adc_vals[k] += self.read_adc(chan) # real
+
+            # restore to rough midpoint, in case calibration fails
+            self.write_dac(chan, self.float2bin(0, chan, cal=False) )
+
+            # expected_adc_vals = self.grad2adc(grad_vals)
+            adc_vals /= averages # normalise again
+
+            observed_grad_vals = self.adc2grad(adc_vals)
+
+            if test_cal:
+                # just plot residuals of data
+                plt.plot(grad_vals, observed_grad_vals - grad_vals, label='Residuals')
+                plt.xlabel('Grad vals (normalised, [-1, 1])')
+                plt.ylabel('Observed grad vals (normalised, [-1, 1])')
+                plt.show()
+            else:
+
+                # perform polynomial fit
+                try:
+                    p = Polynomial.fit(observed_grad_vals, grad_vals, poly_degree)
+                except ValueError:
+                    warnings.warn("Poly fit failed due to numerical problems -- perhaps no current could be output.")
+
+                # check that first normalised coefficient is close to 1
+                coeff = 2*p.coef[1]/np.abs(p.domain).sum()
+                if coeff > 1.05 or coeff < 0.95:
+                    warnings.warn("Poly slope coefficient {:f} for chan {:d} is outside [0.95, 1.05]; will not be used. Make sure the coils are connected to the GPA-FHDO and the system is correctly powered.".format(coeff, chan))
+                else:
+                    self.gpaCal[chan] = p
+
+            self.write_dac(chan, self.float2bin(0, chan, cal=True) ) # restore to precise midpoint
+
+    def apply_cal(self, grad_vals, chan):
+        return self.gpaCal[chan](grad_vals)
 
     ## VN: commenting out the old calibration routine for now - can re-introduce it later
     def calibrate_old(self,
@@ -323,11 +423,16 @@ class GPAFHDO:
         ch_list = ['vx', 'vy', 'vz', 'vz2']
         return "fhdo_" + vstr, ch_list.index(vstr)
 
-    def float2bin(self, grad_data, channel=0):
+    def float2bin(self, grad_vals, channel=0, cal=False):
+        # cal: apply calibration or not
         # Not 2's complement - 0x0 word is ~0V (-10A), 0xffff is ~+5V (+10A)
-        gr_dacbits = np.round(32767.49 * (grad_data + 1)).astype(np.uint16)
-        gr_dacbits_cal = self.calculate_corrected_dac_code(channel,gr_dacbits)
-        gr = gr_dacbits_cal | 0x80000 | (channel << 16)
+        # gr_dacbits_cal = self.calculate_corrected_dac_code(channel,gr_dacbits)
+        if cal:
+            grad_vals_cal = self.apply_cal(grad_vals, channel)
+        else:
+            grad_vals_cal = grad_vals
+        gr_dacbits = np.round(32767.49 * (grad_vals_cal + 1)).astype(np.uint16)
+        gr = gr_dacbits | 0x80000 | (channel << 16)
 
         # # always broadcast for the final channel (TODO: probably not needed for GPA-FHDO, check then remove)
         # broadcast = channel == self.grad_channels - 1

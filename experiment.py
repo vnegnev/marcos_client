@@ -435,14 +435,23 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
         plt.grid(True)
         plt.show()
 
+def test_gpa_calibration():
+    expt = Experiment(init_gpa=True)
+    expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=5)
+    expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=1, test_cal=True)
+
 if __name__ == "__main__":
-    test_rx_scaling(lo_freq=8,
-                    rf_amp=0.5,
-                    rf_steps=False,
-                    rx_time=60,
-                    rx_padding=20,
-                    # rx_periods = np.ones(10, dtype=int)*30,
-                    # rx_periods=np.arange(4, 400, 1),
-                    rx_periods=np.arange(4, 400, 1),
-                    # rx_periods=np.arange(10, 400, 1),
-                    plot_rx=True)
+    if False:
+        test_rx_scaling(lo_freq=8,
+                        rf_amp=0.5,
+                        rf_steps=False,
+                        rx_time=60,
+                        rx_padding=20,
+                        # rx_periods = np.ones(10, dtype=int)*30,
+                        # rx_periods=np.arange(4, 400, 1),
+                        rx_periods=np.arange(4, 400, 1),
+                        # rx_periods=np.arange(10, 400, 1),
+                        plot_rx=True)
+
+    if True:
+        test_gpa_calibration()

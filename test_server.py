@@ -46,10 +46,10 @@ class ServerTest(unittest.TestCase):
                               ' significantly different from server version {:d}.{:d}.{:d}'.format(
                                   version_major, version_minor, version_debug),
                                'not all client commands were understood']}
-        
-        # results = 
+
+        # results =
         expected_outcomes = [diff_info, diff_info, diff_warning, diff_warning, diff_error, diff_error]
-        
+
         for v, ee in zip(versions, expected_outcomes):
             packet = construct_packet({'asdfasdf':1}, self.packet_idx, version=v)
             reply = send_packet(packet, self.s)
@@ -59,12 +59,19 @@ class ServerTest(unittest.TestCase):
 
     def test_idle(self):
         """ Make sure the server state is idle, all the RX and TX buffers are empty, etc."""
+
+        real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
+        if real == "hardware" or real == "simulation":
+            fifo_empties = 0xffffff
+        elif real == "software":
+            fifo_empties = 0
+
         packet = construct_packet({'regstatus': 0})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, 0, 0, 0, 0, 0xffffff, 0]}, {}])
+                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, 0, 0, 0, 0, fifo_empties, 0]}, {}])
 
-    @unittest.skip("flocra devel")            
+    @unittest.skip("flocra devel")
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
         reply = send_packet(packet, self.s)
@@ -87,7 +94,7 @@ class ServerTest(unittest.TestCase):
             deltas = (3, 5, 5)
             times = (5, 7, 7)
             loops = 10000000
-            
+
         packet = construct_packet({'test_bus':loops}, self.packet_idx)
         reply = send_packet(packet, self.s)
         null_t, read_t, write_t = reply[4]['test_bus']
@@ -100,17 +107,17 @@ class ServerTest(unittest.TestCase):
         else:
             print("\nnull_t, read_t, write_t: {:f}, {:f}, {:f} us / cycle".format(null_t/loops, read_t/loops, write_t/loops))
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_io(self):
         packet = construct_packet({'test_net':10}, self.packet_idx)
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_fpga_clk(self):
         packet = construct_packet({'fpga_clk': [0xdf0d, 0x03f03f30, 0x00100700]})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply, [reply_pkt, 1, 0, version_full, {'fpga_clk': 0}, {}])
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_fpga_clk_partial(self):
         packet = construct_packet({'fpga_clk': [0xdf0d,  0x03f03f30]})
         reply = send_packet(packet, self.s)
@@ -120,7 +127,7 @@ class ServerTest(unittest.TestCase):
                           {'errors': ["you only provided some FPGA clock control words; check you're providing all 3"]}]
         )
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_several_okay(self):
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10,
@@ -133,7 +140,7 @@ class ServerTest(unittest.TestCase):
                                    'acq_rlim':10000,
                                    })
         reply = send_packet(packet, self.s)
-        
+
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': 0, 'rx_div': 0,
@@ -144,7 +151,7 @@ class ServerTest(unittest.TestCase):
                               'gradient mem data bytes copied: 32768']}]
         )
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_several_some_bad(self):
         # first, send a normal packet to ensure everything's in a known state
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
@@ -165,9 +172,9 @@ class ServerTest(unittest.TestCase):
                                    'grad_mem': b"0000"*8193,
                                    'acq_rlim': 10,
                                    })
-        
+
         reply = send_packet(packet, self.s)
-        
+
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'lo_freq': 0, 'tx_div': -1, 'rx_div': -1, 'tx_size': -1, 'raw_tx_data': -1, 'grad_div': -1, 'grad_ser': -1, 'grad_mem': -1, 'acq_rlim': -1},
@@ -181,31 +188,47 @@ class ServerTest(unittest.TestCase):
                                       'acquisition retry limit outside the range [1000, 10,000,000]; check your settings'
                                       ]}
                           ])
-    @unittest.skip("flocra devel")
+
     def test_grad_adc(self):
         if grad_board != "gpa-fhdo":
             return
 
-        # set up SPI to deliberately be too fast for the ADC -- latest server should automatically compensate
-        send_packet(construct_packet({'grad_div': (200, 5), 'grad_ser': 2}), self.s)
+        # initialise SPI
+        spi_div = 40
+        upd = False # update on MSB writes
+        send_packet(construct_packet( {'direct': 0x00000000 | (2 << 0) | (spi_div << 2) | (0 << 8) | (upd << 9)} ), self.s)
 
         # # ADC defaults
-        words = [ 0x40850000, # ADC reset
-                  0x400b0600, 0x400d0600, 0x400f0600, 0x40110600, # input ranges for each ADC channel
-                 ] # TODO: set outputs to ~0
+        init_words = [
+            0x00030100, # DAC sync reg
+            0x40850000, # ADC reset
+            0x400b0600, 0x400d0600, 0x400f0600, 0x40110600, # input ranges for each ADC channel
+            # TODO: set outputs to ~0
+        ]
 
-        expected = [ 0xffff, 0x0600, 0x0600, 0x0600, 0x0600 ]
+        real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
+        if real in ['simulation', 'software']:
+            expected = [ 0, 0, 0, 0, 0 ]
+        else:
+            expected = [ 0xffff, 0x0600, 0x0600, 0x0600, 0x0600 ]
+
         readback = []
-        
-        for w in words:
-            send_packet(construct_packet({'grad_dir': w}), self.s)
-            readback.append( send_packet(construct_packet({'grad_adc': 1}), self.s)[4]['grad_adc'] )
+
+        for iw in init_words:
+            # direct commands to grad board; send MSBs then LSBs
+            send_packet(construct_packet( {'direct': 0x02000000 | (iw >> 16)}), self.s)
+            send_packet(construct_packet( {'direct': 0x01000000 | (iw & 0xffff)}), self.s)
+
+            # read ADC each time
+
+            # status reg = 5, ADC word is lower 16 bits
+            readback.append( send_packet(construct_packet({'regrd': 5}), self.s)[4]['regrd'] & 0xffff )
             # if readback != r:
             #     warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(w, readback) )
 
-        self.assertEqual(expected, readback)
+        self.assertEqual(expected, readback[1:]) # ignore 1st word, since it depends on the history of ADC transfers
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_state(self):
         # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
         true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
@@ -214,7 +237,7 @@ class ServerTest(unittest.TestCase):
 
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10,
-                                   'rx_div': 250,                                   
+                                   'rx_div': 250,
                                    'grad_div': (303, 32),
                                    'state': fpga_clk_freq_MHz * 1e6
                                    })
@@ -229,7 +252,7 @@ class ServerTest(unittest.TestCase):
                               'TX sample duration [CHECK]: 0.070000 us',
                               'RX sample duration [CHECK]: 2.034505 us',
                               'gradient sample duration (*not* DAC sampling rate): 2.149000 us',
-                              'gradient SPI transmission duration: 5.558000 us']}])        
+                              'gradient SPI transmission duration: 5.558000 us']}])
 
     def test_leds(self):
         # This test is mainly for the simulator, but will alter hardware LEDs too
@@ -244,10 +267,10 @@ class ServerTest(unittest.TestCase):
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'direct': 0}, {}])            
+                          {'direct': 0}, {}])
 
         packet = construct_packet({'direct': 0x0f002400}) # leds: 24
-        reply = send_packet(packet, self.s)        
+        reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
                           {'direct': 0}, {}])
@@ -256,7 +279,7 @@ class ServerTest(unittest.TestCase):
         packet = construct_packet({'regstatus': 0})
         for k in range(2):
             reply = send_packet(packet, self.s)
-        
+
     def test_flo_mem(self):
         flo_mem_bytes = 4 * 65536 # full memory
         # flo_mem_bytes = 4 * 2 # several writes for testing
@@ -285,7 +308,7 @@ class ServerTest(unittest.TestCase):
                           {'errors': ['too much flo mem data: {:d} bytes > {:d} -- streaming not yet implemented'.format(flo_mem_bytes + 1, flo_mem_bytes)] }
                           ])
 
-    @unittest.skip("flocra devel")        
+    @unittest.skip("flocra devel")
     def test_acquire_simple(self):
         # For comprehensive tests, see test_loopback.py
         samples = 10
@@ -295,7 +318,7 @@ class ServerTest(unittest.TestCase):
         data = np.frombuffer(acquired_data_raw, np.complex64)
 
         self.assertEqual(reply[:4], [reply_pkt, 1, 0, version_full])
-        self.assertEqual(len(acquired_data_raw), samples*8)        
+        self.assertEqual(len(acquired_data_raw), samples*8)
         self.assertIs(type(data), np.ndarray)
         self.assertEqual(data.size, samples)
 
@@ -333,11 +356,11 @@ def throughput_test(s):
 def random_test(s):
     # Random other packet
     process(send_msg(msgpack.packb(construct_packet({'boo': 3}) , s)))
-        
+
 def shutdown_server(s):
     msg = msgpack.packb(construct_packet( {}, 0, command=close_server))
-    process(send_msg(msg, s), print_all=True)    
-    
+    process(send_msg(msg, s), print_all=True)
+
 def test_client(s):
     packet_idx = 0
     pkt = construct_packet( {
@@ -355,7 +378,7 @@ def main_test():
         # throughput_test(s)
         test_client(s)
         # shutdown_server(s)
-    
+
 if __name__ == "__main__":
     # main_test()
     unittest.main()

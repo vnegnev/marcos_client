@@ -6,7 +6,7 @@ from flomachine import FloServerWarning
 
 version_major = 1
 version_minor = 0
-version_debug = 3
+version_debug = 4
 version_full = (version_major << 16) | (version_minor << 8) | version_debug
 
 request_pkt = 0
@@ -27,7 +27,7 @@ def construct_packet(data, packet_idx=0, command=request_pkt, version=(version_m
 
 #     if print_all:
 #         print("")
-        
+
 #         status = payload[5]
 
 #         try:
@@ -85,11 +85,11 @@ def command(server_dict, socket, print_infos=False, assert_errors=False):
         for k in return_status['warnings']:
             warnings.warn(k, FloServerWarning)
 
-    if 'errors' in return_status:            
+    if 'errors' in return_status:
         if assert_errors:
             assert 'errors' not in return_status, return_status['errors'][0]
         else:
             for k in return_status['errors']:
                 warnings.warn("ERROR: " + k, RuntimeWarning)
 
-    return reply, return_status    
+    return reply, return_status

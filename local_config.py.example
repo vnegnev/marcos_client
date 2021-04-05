@@ -13,6 +13,9 @@ port = 11111
 #grad_board = "gpa-fhdo"
 #grad_board = "ocra1"
 
+## GPA-FHDO current per volt setting (determined by resistors)
+gpa_fhdo_current_per_volt = 2.5
+
 ## Ocra-pulseq path, for use of the ocra-pulseq library (optional).
 ## Adjust the path to suit your ocra-pulseq location.
 #import sys
