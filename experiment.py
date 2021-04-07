@@ -229,10 +229,10 @@ class Experiment:
             else:
                 self._seq[name] = sb
 
-    def add_flodict(self, flodict):
+    def add_flodict(self, flodict, append=True):
         """ Add a floating-point dictionary to the sequence """
         assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
-        self.add_intdict( self.flo2int(flodict) )
+        self.add_intdict(self.flo2int(flodict), append)
         self._seq_compiled = False
 
     def compile(self):

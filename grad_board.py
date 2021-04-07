@@ -231,8 +231,13 @@ class GPAFHDO:
         if gated_writes:
             self.update_on_msb_writes(False)
 
-        self.server_command({'direct': 0x02000000 | (0x0008 | channel) }) # MSBs
-        self.server_command({'direct': 0x01000000 | int(value) }) # LSBs
+        msbs = 0x0008 | channel | (channel << 9) # extra channel word for gpa_fhdo_iface, not sure if it's currently used
+        value_msbs = value >> 16
+        if (value_msbs != 0) and (value_msbs != msbs):
+            warnings.warn("You requested channel {:d}, which does not match that of the binary word provided (0x{:0x}). Are you using channels consistently?".format(channel, value))
+
+        self.server_command({'direct': 0x02000000 | msbs }) # MSBs
+        self.server_command({'direct': 0x01000000 | int(value) & 0xffff }) # LSBs
 
         # restore main grad ctrl word to respond to LSB or MSB changes
         if gated_writes:
@@ -324,7 +329,7 @@ class GPAFHDO:
             grad_vals = np.linspace(self.amp2grad(-max_current),
                                     self.amp2grad(max_current),
                                     num_calibration_points )
-            dac_vals = self.float2bin(grad_vals, cal=test_cal)
+            dac_vals = self.float2bin(grad_vals, channel=chan, cal=test_cal)
             adc_vals = np.zeros_like(grad_vals)
 
             for k, dv in enumerate(dac_vals):
