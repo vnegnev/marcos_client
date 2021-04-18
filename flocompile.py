@@ -281,7 +281,7 @@ def cl2bin(changelist, changelist_grad,
                     # gradient buffers will have unneeded instructions
                     # all the time, so not worth warning the user for
                     # those
-                    warnings.warn("Instruction will have no effect. Skipping...", FloRemovedInstructionWarning)
+                    warnings.warn("Instruction at tick {:d}, buffer {:d}, value 0x{:04x}, mask 0x{:04x} will have no effect. Skipping...".format(time, buf, val, mask), FloRemovedInstructionWarning)
                 continue
             val_masked = val & mask
             old_val_unmasked = current_bufs[buf] & ~mask

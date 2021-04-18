@@ -362,21 +362,27 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
         plt.show()
 
 if __name__ == "__main__":
-    from local_config import grad_board
-    # assert grad_board == "ocra1", "Please run examples with OCRA1; GPA-FHDO tests not yet ready"
     # import cProfile
     # cProfile.run('test_grad_echo_loop()')
     # for k in range(100):
-    grad_echo(lo_freq=1, trs=2, plot_rx=True, init_gpa=True, dbg_sc=1)
-    radial(trs=100, init_gpa=True, plot_rx=True)
-    turbo_spin_echo(lo_freq=0.2,
-                    trs=2, echos_per_tr=6,
-                    rf_amp=0.7,
-                    echo_duration=1000,
-                    readout_amp=0.2,
-                    readout_duration=300,
-                    readout_grad_duration=450,
-                    phase_grad_duration=150,
-                    phase_grad_interval=600,
-                    tr_pause_duration=2000,
-                    init_gpa=True, plot_rx=False)
+    grad_echo(lo_freq=1, trs=1, plot_rx=True, init_gpa=True, dbg_sc=1)
+    # radial(trs=100, init_gpa=True, plot_rx=True)
+
+    if True:
+        # Stress test: run lots of sequences on the server - should
+        # take around a day
+        k = 0
+        while k < 100000:
+            k += 1
+            print("TSE, trial {:d}".format(k))
+            turbo_spin_echo(lo_freq=0.2,
+                            trs=2, echos_per_tr=6,
+                            rf_amp=0.7,
+                            echo_duration=1000,
+                            readout_amp=0.2,
+                            readout_duration=300,
+                            readout_grad_duration=450,
+                            phase_grad_duration=150,
+                            phase_grad_interval=600,
+                            tr_pause_duration=2000,
+                            init_gpa=True, plot_rx=False)
