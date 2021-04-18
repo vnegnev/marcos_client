@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import experiment as ex
+from local_config import grad_board
 
 import pdb
 st = pdb.set_trace
@@ -82,11 +83,6 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
 
         rx_tcentre = (rx_tstart + rx_tend) / 2
 
-        if grad_board == "gpa-fhdo":
-            gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 0.2 Msps, so 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra 0.1 for a safety margin)
-            gvyt = gvyt + gpa_fhdo_offset # can't use += because of casting rules
-            gvzt = gvzt + 2*gpa_fhdo_offset
-
         value_dict = {
             # second tx0 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,   rx_tcentre - 10, rx_tcentre + 10]) + tstart,
@@ -104,7 +100,11 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
 
         return value_dict
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa)
+    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    # gpa_fhdo_offset_time in microseconds; offset between channels to
+    # avoid parallel updates (default update rate is 0.2 Msps, so
+    # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
+    # 0.1 for a safety margin)
 
     tr_t = 20 # start the first TR at 20us
     for pamp in phase_amps:
@@ -240,7 +240,11 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
 
     tr_total_time = echo_duration * (echos_per_tr + 1) + tr_pause_duration
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa)
+    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    # gpa_fhdo_offset_time in microseconds; offset between channels to
+    # avoid parallel updates (default update rate is 0.2 Msps, so
+    # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
+    # 0.1 for a safety margin))
 
     global_t = 20 # start the first TR at 20us
 
@@ -256,11 +260,6 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
             slice_grad_t, slice_grad_a = slice_grad_wf(global_t, echo, tr)
 
             global_t += echo_duration
-
-            if grad_board == "gpa-fhdo":
-                gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 0.2 Msps, so 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra 0.1 for a safety margin)
-                phase_grad_t = phase_grad_t + gpa_fhdo_offset # can't use += because of casting rules
-                slice_grad_t = slice_grad_t + 2*gpa_fhdo_offset
 
             expt.add_flodict({
                 'tx0': (tx_t, tx_a),
@@ -312,14 +311,6 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
         gx = G * np.cos(th)
         gy = G * np.sin(th)
 
-
-        if grad_board == "gpa-fhdo":
-            gpa_fhdo_offset = (1 / 0.2 / 3.1) # microseconds; offset between channels to avoid parallel updates (default update rate is 0.2 Msps, so 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra 0.1 for a safety margin)
-            grady_tstart = grad_tstart + gpa_fhdo_offset # can't use += because of casting rules
-            gradz_tstart = grad_tstart + 2*gpa_fhdo_offset
-        else:
-            grady_tstart, gradz_tstart = grad_tstart, grad_tstart
-
         value_dict = {
             # second tx0 pulse and tx1 pulse purely for loopback debugging
             'tx0': ( np.array([rf_tstart, rf_tend,    rx_tstart + 15, rx_tend - 15]),
@@ -343,7 +334,11 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
 
         return value_dict
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa)
+    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    # gpa_fhdo_offset_time in microseconds; offset between channels to
+    # avoid parallel updates (default update rate is 0.2 Msps, so
+    # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
+    # 0.1 for a safety margin))
 
     tr_t = 20 # start the first TR at 20us
     for th in angles:
@@ -368,7 +363,7 @@ if __name__ == "__main__":
     grad_echo(lo_freq=1, trs=1, plot_rx=True, init_gpa=True, dbg_sc=1)
     # radial(trs=100, init_gpa=True, plot_rx=True)
 
-    if True:
+    if False:
         # Stress test: run lots of sequences on the server - should
         # take around a day
         k = 0

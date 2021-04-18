@@ -80,6 +80,24 @@ class OCRA1:
                 0, 0 # gates and LEDs
             ], dtype=np.uint16)}
 
+    def wait_for_ocra1_iface_idle(self):
+        """try multiple times until ocra1_iface core is idle -- read flocra
+         register 5 and look at the ocra1 busy bit
+        """
+        for m in range(2): # waste a few cycles initially (mostly important for simulation)
+            rd, _ = self.server_command({'regrd': 5})
+
+        trials = 1000
+        while trials > 0:
+            rd, _ = self.server_command({'regrd': 5})
+            ocra1_busy = rd[4]['regrd'] & 0x10000
+            # print("trial {:d} busy {:d}".format(1001 - trials, ocra1_busy))
+            if ocra1_busy == 0:
+                # break
+                trials = 0
+            else:
+                trials -= 1 # try again
+
     def init_hw(self):
         init_words = [
             # lower 24 bits sent to ocra1, upper 8 bits used to control ocra1 serialiser channel + broadcast
@@ -94,13 +112,15 @@ class OCRA1:
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (0 << 8) | (0 << 9)})
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (0 << 9)})
 
-        for iw in init_words:
+        for k, iw in enumerate(init_words):
+            self.wait_for_ocra1_iface_idle()
+
             # direct commands to grad board; send MSBs then LSBs
             self.server_command({'direct': 0x02000000 | (iw >> 16)})
             self.server_command({'direct': 0x01000000 | (iw & 0xffff)})
 
-        # restore main grad ctrl word to respond to LSB or MSB changes
-        self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (1 << 9)})
+        # restore main grad ctrl word to its default value, and reset the OCRA1 iface core
+        self.server_command({'direct': 0x00000000})
 
     def write_dac(self, channel, value, gated_writes=True):
         """gated_writes: if the caller knows that flocra will already be set
@@ -186,6 +206,24 @@ class GPAFHDO:
                 0, 0 # gates and LEDs
             ], dtype=np.uint16)}
 
+    def wait_for_gpa_fhdo_iface_idle(self):
+        """try multiple times until gpa_fhdo_iface core is idle -- read flocra
+         register 5 and look at the fhdo busy bit
+        """
+        for m in range(2): # waste a few cycles initially (mostly important for simulation)
+            rd, _ = self.server_command({'regrd': 5})
+
+        trials = 1000
+        while trials > 0:
+            rd, _ = self.server_command({'regrd': 5})
+            fhdo_busy = rd[4]['regrd'] & 0x20000
+            # print("trial {:d} busy {:d}".format(1001 - trials, fhdo_busy))
+            if fhdo_busy == 0:
+                # break
+                trials = 0
+            else:
+                trials -= 1 # try again
+
     def init_hw(self):
         init_words = [
             0x00030100, # DAC sync reg
@@ -201,12 +239,14 @@ class GPAFHDO:
         self.server_command({'direct': 0x00000000 | (2 << 0) | (self.adc_spi_div << 2) | (0 << 8) | (0 << 9)})
 
         for iw in init_words:
+            self.wait_for_gpa_fhdo_iface_idle()
+
             # direct commands to grad board; send MSBs then LSBs
             self.server_command({'direct': 0x02000000 | (iw >> 16)})
             self.server_command({'direct': 0x01000000 | (iw & 0xffff)})
 
-        # restore main grad ctrl word to respond to LSB or MSB changes
-        self.server_command({'direct': 0x00000000 | (2 << 0) | (self.spi_div << 2) | (0 << 8) | (1 << 9)})
+        # restore main grad ctrl word to default
+        self.server_command({'direct': 0x00000000})
 
     def update_on_msb_writes(self, upd, spi_div=None):
         if spi_div is None:
@@ -436,7 +476,7 @@ class GPAFHDO:
             grad_vals_cal = self.apply_cal(grad_vals, channel)
         else:
             grad_vals_cal = grad_vals
-        gr_dacbits = np.round(32767.49 * (grad_vals_cal + 1)).astype(np.uint16)
+        gr_dacbits = np.round(32767.51 * (grad_vals_cal + 1)).astype(np.uint16)
         gr = gr_dacbits | 0x80000 | (channel << 16)
 
         # # always broadcast for the final channel (TODO: probably not needed for GPA-FHDO, check then remove)

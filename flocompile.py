@@ -253,6 +253,10 @@ def cl2bin(changelist, changelist_grad,
     changelist += changelist_grad_shifted
     changelist.sort(key=sortfn) # sort by time
 
+    # Track removed instruction events, but only warn when the number exceeds a minimum
+    removed_instruction_warnings = []
+    max_removed_instructions = 10
+
     # Process and combine the change list into discrete sets of operations at each time, i.e. an output list
     def cl2ol(changelist):
         current_bufs = initial_bufs.copy()
@@ -281,7 +285,7 @@ def cl2bin(changelist, changelist_grad,
                     # gradient buffers will have unneeded instructions
                     # all the time, so not worth warning the user for
                     # those
-                    warnings.warn("Instruction at tick {:d}, buffer {:d}, value 0x{:04x}, mask 0x{:04x} will have no effect. Skipping...".format(time, buf, val, mask), FloRemovedInstructionWarning)
+                    removed_instruction_warnings.append( "Instruction at tick {:d}, buffer {:d}, value 0x{:04x}, mask 0x{:04x} will have no effect. Skipping...".format(time, buf, val, mask) )
                 continue
             val_masked = val & mask
             old_val_unmasked = current_bufs[buf] & ~mask
@@ -295,6 +299,12 @@ def cl2bin(changelist, changelist_grad,
         return unique_changes
 
     changes = cl2ol(changelist)
+
+    # warn about all the removed instructions if there are more than a maximum number
+    if len(removed_instruction_warnings) > max_removed_instructions:
+        for riw in removed_instruction_warnings:
+            warnings.warn(riw, FloRemovedInstructionWarning)
+        warnings.warn("NOTE: Fewer than {:d} removed-instruction warnings will not be printed -- keep this in mind when searching for the root cause.".format(max_removed_instructions))
 
     # Process time offsets
     for ch, ch_prev in zip( reversed(changes[1:]), reversed(changes[:-1]) ):

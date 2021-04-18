@@ -29,7 +29,6 @@ class ModelTest(unittest.TestCase):
         os.system("killall flocra_sim") # in case other instances were started earlier
 
         warnings.simplefilter("ignore", fc.FloServerWarning)
-        # warnings.simplefilter("ignore", fc.FloRemovedInstructionWarning)
 
     def setUp(self):
         # start simulation
@@ -315,6 +314,17 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_dict(d, "test_single", self.s, self.p)
         self.assertEqual(refl, siml)
 
+    def test_removed_instructions_dict(self):
+        """Basic state change on a single buffer, with many more specified
+        events than actual changes, leading to removed instructions and a
+        series of warnings. Dict version"""
+        reps = 100
+        d = {'tx0_i': ( np.arange(100, 100 + reps) , np.array([10000]*100) )}
+        with self.assertWarns( fc.FloRemovedInstructionWarning,
+                               msg="expected flocompile warning not observed") as cmu:
+            refl, siml = compare_dict(d, "test_single", self.s, self.p)
+        self.assertEqual(refl, siml)
+
     def test_four_par_dict(self):
         """ State change on four buffers in parallel. Dict version"""
         d = {'tx0_i': (np.array([100]), np.array([5000])),
@@ -456,7 +466,6 @@ class ModelTest(unittest.TestCase):
 
         set_grad_board("gpa-fhdo")
         expt_args = {'rx_t': 0.5}
-        warnings.warn("NEED TO FIX GPA-FHDO CALIBRATION PROCESS TO DO ROUNDING PROPERLY - CSV '0' is 32767 and not 32768")
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_fhd", self.s, self.p, **expt_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
