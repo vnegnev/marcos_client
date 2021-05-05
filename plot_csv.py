@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys, pdb
+from local_config import fpga_clk_freq_MHz
 st = pdb.set_trace
 
 if __name__ == "__main__":
@@ -22,8 +23,8 @@ if __name__ == "__main__":
 
     data = np.loadtxt(sys.argv[1], skiprows=1, delimiter=',')
     data[1:, 0] = data[1:, 0] - data[1, 0] + 1 # remove dead time in the beginning taken up by simulated memory writes
-    
-    time_us = data[:,0]/122.88
+
+    time_us = data[:,0]/fpga_clk_freq_MHz
     tx = data[:,1:5].astype(np.int16) / 32768
     # offset binary
     fhdo = data[:,5:9].astype(np.uint16) / 32768 - 1
@@ -31,7 +32,7 @@ if __name__ == "__main__":
     ocra1 = ( (data[:,9:13].astype(np.int32) ^ (1 << 17)) - (1 << 17) ).astype(np.int32) / 131072
     gdata = np.hstack([fhdo, ocra1])
     gdata_nonzero = np.nonzero(gdata.any(0))[0]
-    
+
     rx = data[:,14:21].astype(np.uint8)
     rx_en = rx[:, 5:] # ignore the rate logic, only plot the RX enables
     io = data[:,21:].astype(np.uint8)
@@ -52,10 +53,8 @@ if __name__ == "__main__":
     rxs.legend(["rx0 en", "rx1 en"])
 
     ios.step(time_us, io, where='post')
-    ios.legend(['tx gate', 'rx gate', 'trig out', 'leds'])        
+    ios.legend(['tx gate', 'rx gate', 'trig out', 'leds'])
     grads.set_xlabel('time (us)')
-    
+
     fig.tight_layout()
     plt.show()
-    # st()
-    
