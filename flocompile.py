@@ -4,12 +4,17 @@
 import numpy as np
 import warnings
 from flomachine import *
-from local_config import grad_board
+try:
+    from local_config import grad_board
+except ModuleNotFoundError:
+    grad_board = "gpa-fhdo"
 
 import pdb
 st = pdb.set_trace
 
 grad_data_bufs = (1, 2)
+
+max_removed_instructions = 1000
 
 def debug_print(*args, **kwargs):
     # print(*args, **kwargs)
@@ -255,7 +260,6 @@ def cl2bin(changelist, changelist_grad,
 
     # Track removed instruction events, but only warn when the number exceeds a minimum
     removed_instruction_warnings = []
-    max_removed_instructions = 10
 
     # Process and combine the change list into discrete sets of operations at each time, i.e. an output list
     def cl2ol(changelist):

@@ -229,7 +229,7 @@ class GPAFHDO:
             0x00030100, # DAC sync reg
             0x40850000, # ADC reset
             0x400b0600, 0x400d0600, 0x400f0600, 0x40110600, # input ranges for each ADC channel
-            # TODO: set outputs to ~0
+            0x00088000, 0x00098000, 0x000a8000, 0x000b8000 # set each DAC channel to output 0
         ]
 
         # configure main grad ctrl word first, in particular switch it to update the serialiser strobe only in response to LSB changes;

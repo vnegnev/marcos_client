@@ -318,8 +318,8 @@ class ModelTest(unittest.TestCase):
         """Basic state change on a single buffer, with many more specified
         events than actual changes, leading to removed instructions and a
         series of warnings. Dict version"""
-        reps = 100
-        d = {'tx0_i': ( np.arange(100, 100 + reps) , np.array([10000]*100) )}
+        reps = 2000
+        d = {'tx0_i': ( np.arange(100, 100 + reps) , np.array([10000]*reps) )}
         with self.assertWarns( fc.FloRemovedInstructionWarning,
                                msg="expected flocompile warning not observed") as cmu:
             refl, siml = compare_dict(d, "test_single", self.s, self.p)

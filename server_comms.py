@@ -6,7 +6,7 @@ from flomachine import FloServerWarning
 
 version_major = 1
 version_minor = 0
-version_debug = 4
+version_debug = 5
 version_full = (version_major << 16) | (version_minor << 8) | version_debug
 
 request_pkt = 0
