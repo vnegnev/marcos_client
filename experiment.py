@@ -79,14 +79,7 @@ class Experiment:
         else:
             self._s = prev_socket
 
-        # extend lo_freq to 3 elements
-        if not hasattr(lo_freq, "__len__"):
-            lo_freq = lo_freq, lo_freq, lo_freq # extend to 3 elements
-        elif len(lo_freq) < 3:
-            lo_freq = lo_freq[0], lo_freq[1], lo_freq[0] # extend from 2 to 3 elements
-
-        self._dds_phase_steps = np.round(2**31 / fpga_clk_freq_MHz * np.array(lo_freq)).astype(np.uint32)
-        self._lo_freqs = self._dds_phase_steps * fpga_clk_freq_MHz / (2 ** 31) # real LO freqs
+        self.set_lo_freq(lo_freq)
 
         if not hasattr(rx_t, "__len__"):
             rx_t = rx_t, rx_t # extend to 2 elements
@@ -159,6 +152,21 @@ class Experiment:
                     warnings.warn("ERROR: " + k)
 
         return reply, return_status
+
+
+    def set_lo_freq(self, lo_freq):
+        # lo_freq: either a single floating-point value, or an iterable of up to three values for each flocra NCO
+
+        # extend lo_freq to 3 elements
+        if not hasattr(lo_freq, "__len__"):
+            lo_freq = lo_freq, lo_freq, lo_freq # extend to 3 elements
+        elif len(lo_freq) < 3:
+            lo_freq = lo_freq[0], lo_freq[1], lo_freq[0] # extend from 2 to 3 elements
+
+        self._dds_phase_steps = np.round(2**31 / fpga_clk_freq_MHz * np.array(lo_freq)).astype(np.uint32)
+        self._lo_freqs = self._dds_phase_steps * fpga_clk_freq_MHz / (2 ** 31) # real LO freqs -- TODO: print for debugging
+
+        self._seq_compiled = False # force recompilation
 
     def flo2int(self, seq_dict):
         """Convert a floating-point sequence dictionary to an integer binary
