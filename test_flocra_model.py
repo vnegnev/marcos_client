@@ -502,5 +502,23 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
 
+    def test_init_grad_expt_fhd(self):
+        """ Test whether GPA-FHDO gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait"""
+        set_grad_board("gpa-fhdo")
+        expt_args={'rx_t': 0.5, 'grad_max_update_rate': 0.1} # deliberately slow update rate
+        d = {'grad_vx': (np.array([0, 5]), np.array([0.5, 0]))}
+        refl, siml = compare_expt_dict(d, "test_init_grad_expt_fhd", self.s, self.p, **expt_args)
+        restore_grad_board()
+        self.assertEqual(refl, siml)
+
+    def test_init_grad_expt_oc1(self):
+        """ Test whether OCRA1 gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait."""
+        set_grad_board("ocra1")
+        expt_args={'rx_t': 0.5, 'grad_max_update_rate': 0.1} # deliberately slow update rate
+        d = {'grad_vx': (np.array([0, 20]), np.array([0.5, 0])) }
+        refl, siml = compare_expt_dict(d, "test_init_grad_expt_oc1", self.s, self.p, **expt_args)
+        restore_grad_board()
+        self.assertEqual(refl, siml)
+
 if __name__ == "__main__":
     unittest.main()

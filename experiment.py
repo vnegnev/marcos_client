@@ -64,7 +64,7 @@ class Experiment:
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
-                 initial_wait=1, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least 1us
+                 initial_wait=None, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least a few us. Is suitably set based on grad_max_update_rate by default.
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
                  fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
                  set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
@@ -99,8 +99,6 @@ class Experiment:
             rx_lo = rx_lo, rx_lo # extend to 2 elements
         self._rx_lo = rx_lo
 
-        self._initial_wait = initial_wait
-
         assert grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
         if grad_board == 'ocra1':
             gradb_class = gb.OCRA1
@@ -109,6 +107,10 @@ class Experiment:
             gradb_class = gb.GPAFHDO
             self._gpa_fhdo_offset_time = gpa_fhdo_offset_time
         self.gradb = gradb_class(self.server_command, grad_max_update_rate)
+
+        if initial_wait is None:
+            # auto-set the initial wait to be long enough for initial gradient configuration to finish, plus 1us for miscellaneous startup
+            self._initial_wait = 1 + 1/grad_max_update_rate
 
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
         self._csv = None
