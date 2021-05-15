@@ -34,7 +34,7 @@ def trap_cent(centre_t, plateau_a, trap_t, ramp_t, ramp_pts, base_a=0):
     t, a = trapezoid(plateau_a, trap_t, ramp_t, ramp_pts, False, base_a)
     return t + centre_t - (trap_t + ramp_t)/2, a
 
-def grad_echo(trs=21, plot_rx=False, init_gpa=False,
+def grad_echo(trs=21, plot_rx=False, init_gpa=False, plot_sequence=False,
               dbg_sc=0.5, # set to 0 to avoid 2nd RF debugging pulse, otherwise amp between 0 or 1
               lo_freq=0.1, # MHz
               rf_amp=1, # 1 = full-scale
@@ -106,10 +106,14 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
     # 0.1 for a safety margin)
 
-    tr_t = 20 # start the first TR at 20us
+    tr_t = 0 # start the first TR at 20us
     for pamp in phase_amps:
         expt.add_flodict( grad_echo_tr( tr_t, pamp) )
         tr_t += tr_total_time
+
+    if plot_sequence:
+        expt.plot_sequence()
+        plt.show()
 
     rxd, msgs = expt.run()
     expt.close_server(True)
@@ -122,7 +126,7 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False,
         plt.plot( rxd['rx1'].imag )
         plt.show()
 
-def turbo_spin_echo(plot_rx=False, init_gpa=False,
+def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
                     dbg_sc=0.5, # set to 0 to avoid RF debugging pulses in each RX window, otherwise amp between 0 or 1
                     lo_freq=0.2, # MHz
                     rf_amp=1, # 1 = full-scale
@@ -246,7 +250,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
     # 0.1 for a safety margin))
 
-    global_t = 20 # start the first TR at 20us
+    global_t = 0 # start the first TR at this time
 
     for tr in range(trs):
         for echo in range(echos_per_tr + 1):
@@ -275,6 +279,10 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
 
         global_t += tr_pause_duration
 
+    if plot_sequence:
+        expt.plot_sequence()
+        plt.show()
+
     rxd, msgs = expt.run()
     expt.close_server(True)
     expt._s.close() # close socket
@@ -286,7 +294,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False,
         plt.plot( rxd['rx1'].imag )
         plt.show()
 
-def radial(trs=36, plot_rx=False, init_gpa=False):
+def radial(trs=36, plot_rx=False, init_gpa=False, plot_sequence=False):
     ## All times are relative to a single TR, starting at time 0
     lo_freq = 0.2 # MHz
     rf_amp = 0.5 # 1 = full-scale
@@ -294,7 +302,8 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
     G = 0.5 # Gx = G cos (t), Gy = G sin (t)
     angles = np.linspace(0, 2*np.pi, trs) # angle
 
-    grad_tstart = 0 # us
+    gradz_tstart = 0 # us
+    grady_tstart = gradz_tstart # us
     rf_tstart = 5 # us
     rf_tend = 50 # us
     rx_tstart = 70 # us
@@ -340,10 +349,14 @@ def radial(trs=36, plot_rx=False, init_gpa=False):
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
     # 0.1 for a safety margin))
 
-    tr_t = 20 # start the first TR at 20us
+    tr_t = 0 # start the first TR at 0us
     for th in angles:
         expt.add_flodict( radial_tr( tr_t, th ) )
         tr_t += tr_total_time
+
+    if plot_sequence:
+        expt.plot_sequence()
+        plt.show()
 
     rxd, msgs = expt.run()
     expt.close_server(True)
@@ -360,8 +373,9 @@ if __name__ == "__main__":
     # import cProfile
     # cProfile.run('test_grad_echo_loop()')
     # for k in range(100):
-    grad_echo(lo_freq=1, trs=1, plot_rx=True, init_gpa=True, dbg_sc=1)
-    # radial(trs=100, init_gpa=True, plot_rx=True)
+    # grad_echo(lo_freq=1, trs=1, plot_rx=True, init_gpa=True, dbg_sc=1)
+    radial(trs=100, init_gpa=True, plot_rx=True)
+    # turbo_spin_echo(trs=2, echos_per_tr=4, plot_sequence=False, tr_pause_duration=100000)
 
     if False:
         # Stress test: run lots of sequences on the server - should

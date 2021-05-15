@@ -29,6 +29,10 @@
 # reproduce the multi-channel waveform on the GPA - should apply any
 # desired calibrations/transforms internally.
 #
+# bin2float() to convert the binary data into [-1, 1] floats.
+#
+# keys() returns the gradient board-specific labels
+#
 # key_convert() to convert from the user-facing dictionary key labels
 # to gradient board-specific labels, and also return a channel
 #
@@ -141,6 +145,9 @@ class OCRA1:
         # Fill more in here
         st()
 
+    def keys(self):
+        return ["ocra1_" + l for l in ["vx", "vy", "vz", "vz2"] ]
+
     def key_convert(self, user_key):
         # convert key from user-facing dictionary to flocompile format
         vstr = user_key.split('_')[1]
@@ -151,6 +158,9 @@ class OCRA1:
         cv = self.cal_values[channel]
         gd_cal = grad_data * cv[0] + cv[1] # calibration
         return np.round(131071.49 * gd_cal).astype(np.uint32) & 0x3ffff # 2's complement
+
+    def bin2float(self, grad_bin):
+        return ( ((grad_bin & 0x3ffff).astype(np.int32) ^ (1 << 17)) - (1 << 17) ).astype(np.int32) / 131072
 
 class GPAFHDO:
     def __init__(self,
@@ -462,6 +472,9 @@ class GPAFHDO:
         # housekeeping
         self.update_on_msb_writes(True)
 
+    def keys(self):
+        return ["fhdo_" + l for l in ["vx", "vy", "vz", "vz2"] ]
+
     def key_convert(self, user_key):
         # convert key from user-facing dictionary to flocompile format
         vstr = user_key.split('_')[1]
@@ -483,3 +496,6 @@ class GPAFHDO:
         # broadcast = channel == self.grad_channels - 1
         # grad_bram_data[channel::self.grad_channels] = gr | (channel << 25) | (broadcast << 24) # interleave data
         return gr | (channel << 25) # extra channel word for gpa_fhdo_iface, not sure if it's currently used
+
+    def bin2float(self, grad_bin):
+        return (grad_bin & 0xffff).astype(np.uint16) / 32768 - 1

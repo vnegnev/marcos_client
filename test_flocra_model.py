@@ -220,7 +220,7 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
-        self.assertEqual( str(cmr.warning) , "ERROR: gpa-fhdo gradient error; possibly missing samples")
+        self.assertEqual( str(cmr.warning) , "SERVER ERROR: gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual(refl, siml)
 
     def test_oc1_single(self):
@@ -305,7 +305,7 @@ class ModelTest(unittest.TestCase):
             restore_grad_board()
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
-        self.assertEqual( str(cmr.warning) , "ERROR: ocra1 gradient error; possibly missing samples")
+        self.assertEqual( str(cmr.warning) , "SERVER ERROR: ocra1 gradient error; possibly missing samples")
         self.assertEqual(refl, siml)
 
     def test_single_dict(self):
@@ -421,7 +421,7 @@ class ModelTest(unittest.TestCase):
         """ Basic state change on a single buffer. Experiment version"""
         set_grad_board("gpa-fhdo")
         d = {'tx0_i': (np.array([1]), np.array([0.5]))}
-        expt_args = {'rx_t': 2}
+        expt_args = {'rx_t': 2, 'auto_leds': False}
         refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
 
@@ -435,7 +435,7 @@ class ModelTest(unittest.TestCase):
     def test_four_par_expt_iq(self):
         """ State change on four buffers in parallel. Experiment version using complex inputs"""
         d = {'tx0': (np.array([1]), np.array([0.5+0.2j])), 'tx1': (np.array([1]), np.array([-0.3+1j]))}
-        expt_args = {'rx_t': 2}
+        expt_args = {'rx_t': 2, 'auto_leds': False}
         set_grad_board("gpa-fhdo")
         refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
@@ -465,7 +465,7 @@ class ModelTest(unittest.TestCase):
              }
 
         set_grad_board("gpa-fhdo")
-        expt_args = {'rx_t': 0.5}
+        expt_args = {'rx_t': 0.5, 'auto_leds': False}
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_fhd", self.s, self.p, **expt_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
@@ -488,7 +488,7 @@ class ModelTest(unittest.TestCase):
              }
 
         set_grad_board("ocra1")
-        expt_args = {'rx_t': 0.5}
+        expt_args = {'rx_t': 0.5, 'auto_leds': False}
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_oc1", self.s, self.p, **expt_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
@@ -497,7 +497,7 @@ class ModelTest(unittest.TestCase):
         """ Test the experiment code to program the open-source (non-Xilinx) variant of the CIC filter """
         # d = {'tx0': ( np.array([10, 15]), np.array([0.5, 0]) )}
         set_grad_board("ocra1")
-        expt_args = {'rx_t': 0.5, 'set_cic_shift': True}
+        expt_args = {'rx_t': 0.5, 'set_cic_shift': True, 'auto_leds': False}
         refl, siml = compare_expt_dict({}, "test_cic_shift_expt", self.s, self.p, **expt_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
@@ -505,7 +505,7 @@ class ModelTest(unittest.TestCase):
     def test_init_grad_expt_fhd(self):
         """ Test whether GPA-FHDO gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait"""
         set_grad_board("gpa-fhdo")
-        expt_args={'rx_t': 0.5, 'grad_max_update_rate': 0.1} # deliberately slow update rate
+        expt_args = {'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
         d = {'grad_vx': (np.array([0, 5]), np.array([0.5, 0]))}
         refl, siml = compare_expt_dict(d, "test_init_grad_expt_fhd", self.s, self.p, **expt_args)
         restore_grad_board()
@@ -514,10 +514,17 @@ class ModelTest(unittest.TestCase):
     def test_init_grad_expt_oc1(self):
         """ Test whether OCRA1 gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait."""
         set_grad_board("ocra1")
-        expt_args={'rx_t': 0.5, 'grad_max_update_rate': 0.1} # deliberately slow update rate
+        expt_args = {'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
         d = {'grad_vx': (np.array([0, 20]), np.array([0.5, 0])) }
         refl, siml = compare_expt_dict(d, "test_init_grad_expt_oc1", self.s, self.p, **expt_args)
         restore_grad_board()
+        self.assertEqual(refl, siml)
+
+    def test_auto_leds_expt(self):
+        """ Test whether the auto-LED scan works correctly """
+        expt_args = {'auto_leds': True}
+        d = {'tx0_i': (np.array([0, 100]), np.array([1, 0])) }
+        refl, siml = compare_expt_dict(d, "test_auto_leds_expt", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
 
 if __name__ == "__main__":

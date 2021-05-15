@@ -40,8 +40,8 @@ def long_loopback(rf_interval=1000000, trs=20):
         rx_t = rf_start_delay + k*rf_interval - rx_pad + np.array([0, rf_length + 2*rx_pad])
         expt.add_flodict({
             'tx1': ( rf_t, np.array([rf_amp, 0]) ),
-            'rx1_en': ( rx_t, np.array([1, 0]) ),
-            'leds': ( np.array([k*rf_interval]), np.array(k) )
+            'rx1_en': ( rx_t, np.array([1, 0]) )
+            # 'leds': ( np.array([k*rf_interval]), np.array(k) )
             })
 
     rxd, msgs = expt.run()

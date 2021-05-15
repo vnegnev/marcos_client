@@ -35,13 +35,15 @@ if __name__ == "__main__":
 
     rx = data[:,14:21].astype(np.uint8)
     rx_en = rx[:, 5:] # ignore the rate logic, only plot the RX enables
-    io = data[:,21:].astype(np.uint8)
+    io = data[:,21:].astype(float)
+    io[:,-1] = io[:,-1] / 256 # scale down LEDs to [0, 1)
 
-    fig, (txs, grads, rxs, ios) = plt.subplots(4, 1, figsize=(12,8), sharex='col')
+    fig, axes = plt.subplots(4, 1, figsize=(12,8), sharex='col')
+
+    (txs, grads, rxs, ios) = axes
 
     txs.step(time_us, tx, where='post')
     txs.legend(['tx0 i', 'tx0 q', 'tx1 i', 'tx1 q'])
-    txs.grid(True)
 
     glegends = ['fhdo x', 'fhdo y', 'fhdo z', 'fhdo z2', 'ocra1 x', 'ocra1 y', 'ocra1 z', 'ocra1 z2']
 
@@ -54,7 +56,10 @@ if __name__ == "__main__":
 
     ios.step(time_us, io, where='post')
     ios.legend(['tx gate', 'rx gate', 'trig out', 'leds'])
-    grads.set_xlabel('time (us)')
+    ios.set_xlabel('time (us)')
+
+    for ax in axes:
+        ax.grid(True)
 
     fig.tight_layout()
     plt.show()

@@ -90,6 +90,6 @@ def command(server_dict, socket, print_infos=False, assert_errors=False):
             assert 'errors' not in return_status, return_status['errors'][0]
         else:
             for k in return_status['errors']:
-                warnings.warn("ERROR: " + k, RuntimeWarning)
+                warnings.warn("SERVER ERROR: " + k, RuntimeWarning)
 
     return reply, return_status

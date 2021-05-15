@@ -58,13 +58,14 @@ class Experiment:
                  rx_t=1, # us, best-effort
                  seq_dict=None,
                  seq_csv=None,
-                 rx_lo=0, # which of LOs (0, 1, 2) to use for each channel
+                 rx_lo=0, # which of internal NCO local oscillators (LOs), out of 0, 1, 2, to use for each channel
                  grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
                  gpa_fhdo_offset_time=0, # when GPA-FHDO is used, offset the Y, Z and Z2 gradient times by 1x, 2x and 3x this value to emulate 'simultaneous' updates
                  print_infos=True, # show server info messages
-                 assert_errors=True, # halt on errors
+                 assert_errors=True, # halt on server errors
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
                  initial_wait=None, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least a few us. Is suitably set based on grad_max_update_rate by default.
+                 auto_leds=True, # automatically scan the LED pattern from 0 to 255 as the sequence runs (set to off if you wish to manually control the LEDs)
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
                  fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
                  set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
@@ -105,6 +106,9 @@ class Experiment:
             # auto-set the initial wait to be long enough for initial gradient configuration to finish, plus 1us for miscellaneous startup
             self._initial_wait = 1 + 1/grad_max_update_rate
 
+        self._ultimate_time = 0
+        self._auto_leds = auto_leds
+
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
         self._csv = None
         self._seq = None
@@ -131,27 +135,7 @@ class Experiment:
         self._s.close()
 
     def server_command(self, server_dict):
-        packet = sc.construct_packet(server_dict)
-        reply = sc.send_packet(packet, self._s)
-        return_status = reply[5]
-
-        if self._print_infos and 'infos' in return_status:
-            print("Server info:")
-            for k in return_status['infos']:
-                print(k)
-
-        if 'warnings' in return_status:
-            for k in return_status['warnings']:
-                warnings.warn(k)
-
-        if 'errors' in return_status:
-            if self._assert_errors:
-                assert 'errors' not in return_status, return_status['errors'][0]
-            else:
-                for k in return_status['errors']:
-                    warnings.warn("ERROR: " + k)
-
-        return reply, return_status
+        return sc.command(server_dict, self._s, self._print_infos, self._assert_errors)
 
 
     def set_lo_freq(self, lo_freq):
@@ -241,8 +225,11 @@ class Experiment:
             if name in self._seq.keys() and append:
                 a, b = self._seq[name]
                 self._seq[name] = ( np.append(a, sb[0]), np.append(b, sb[1]) )
+                if sb[0][-1] > self._ultimate_time:
+                    self._ultimate_time = sb[0][-1]
             else:
                 self._seq[name] = sb
+                self._ultimate_time = sb[0][-1]
 
     def add_flodict(self, flodict, append=True):
         """ Add a floating-point dictionary to the sequence """
@@ -299,6 +286,15 @@ class Experiment:
         if self._rx_lo[1] != 0:
             initial_cfg.update({ 'rx1_lo': ( np.array([tstart]), np.array([self._rx_lo[1]]) ) })
 
+        # Automatic LED scan
+        if self._auto_leds:
+            led_steps = 256
+            if self._ultimate_time < 256:
+                led_steps = self._ultimate_time
+            led_times = np.linspace(tstart, self._ultimate_time + tstart, 256).astype(np.int64)
+            led_vals = np.linspace(1, 256, led_steps).astype(np.uint32)
+            initial_cfg.update({ 'leds': (led_times, led_vals) }) # should overlap with any previous LED settings
+
         self.add_intdict(initial_cfg)
 
         self._machine_code = np.array( fc.dict2bin(self._seq,
@@ -306,11 +302,71 @@ class Experiment:
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
                                              ), dtype=np.uint32 )
 
+    def plot_sequence(self, axes=None):
+        """ axes: 4-element tuple of axes upon which the TX, gradients, RX and digital I/O plots will be drawn.
+        If not provided, plot_sequence() will create its own. """
+        if axes is None:
+            _, axes = plt.subplots(4, 1, figsize=(12,8), sharex='col')
+
+        (txs, grads, rxs, ios) = axes
+
+        if not self._seq_compiled:
+            self.compile()
+
+        def convert_t(t_bin, y):
+            # add a zero event in the beginning, and shift the times to the 'user frame'
+            t = np.concatenate( ([0], t_bin) ) /fpga_clk_freq_MHz - self._initial_wait
+            # add a zero value in the beginning of outputs
+            y2 = np.concatenate( ([0], y) )
+            return t, y2
+
+        # Plot TX channels
+        for txl in ['tx0_i', 'tx0_q', 'tx1_i', 'tx1_q']:
+            try:
+                t_bin, tx_bin = self._seq[txl]
+                t, tx = convert_t(t_bin, tx_bin.astype(np.int16) / 32768)
+                txs.step(t, tx, where='post', label=txl)
+            except KeyError:
+                continue
+
+        # Plot gradient channels
+        for gradl in self.gradb.keys():
+            try:
+                t_bin, grad_bin = self._seq[gradl]
+                t, grad = convert_t(t_bin, self.gradb.bin2float(grad_bin) )
+                grads.step(t, grad, where='post', label=gradl)
+            except KeyError:
+                continue
+
+        # Plot RX enable channels
+        for rxl in ['rx0_en', 'rx1_en']:
+            try:
+                t_bin, rx = self._seq[rxl]
+                t, rx = convert_t(t_bin, rx)
+                rxs.step(t, rx, where='post', label=rxl)
+            except KeyError:
+                continue
+
+        # Plot digital outputs
+        for iol in ['tx_gate', 'rx_gate', 'trig_out', 'leds']:
+            try:
+                t_bin, io = self._seq[iol]
+                t, io = convert_t(t_bin, io)
+                if iol == 'leds':
+                    io = io.astype(np.uint8).astype(float) / 256
+                ios.step(t, io, where='post', label=iol)
+            except KeyError:
+                continue
+
+        for ax in axes:
+            ax.legend()
+            ax.grid(True)
+
     def run(self):
         """ compile the TX and grad data, send everything over.
         Returns the resultant data """
 
-        if self._seq_compiled is False:
+        if not self._seq_compiled:
             self.compile()
 
         if self._flush_old_rx:
