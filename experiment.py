@@ -55,7 +55,7 @@ class Experiment:
 
     def __init__(self,
                  lo_freq=1, # MHz
-                 rx_t=1, # us, best-effort
+                 rx_t=3.125, # us; multiples of 1/122.88, such as 3.125, are exact, others will be rounded to the nearest multiple of the 122.88 MHz clock
                  seq_dict=None,
                  seq_csv=None,
                  rx_lo=0, # which of internal NCO local oscillators (LOs), out of 0, 1, 2, to use for each channel
@@ -361,6 +361,8 @@ class Experiment:
         for ax in axes:
             ax.legend()
             ax.grid(True)
+
+        ios.set_xlabel(r'time ($\mu$s)')
 
     def run(self):
         """ compile the TX and grad data, send everything over.
