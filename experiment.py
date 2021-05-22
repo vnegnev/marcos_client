@@ -167,19 +167,27 @@ class Experiment:
             """ farr: float array, [-1, 1] """
             return np.round(32767 * farr).astype(np.uint16)
 
-        def tx_complex(farr):
-            """ farr: complex float array, [-1-1j, 1+1j] -- returns a tuple """
+        def tx_complex(times, farr, tolerance=2e-6):
+            """times: float time array, farr: complex float array, [-1-1j, 1+1j]
+            tolerance: minimum difference two values need to be considered binary-unique (2e-6 corresponds to ~19 bits)
+            -- returns a tuple with repeated elements removed"""
             idata, qdata = farr.real, farr.imag
-            return tx_real(idata), tx_real(qdata)
+            unique = lambda k: np.concatenate([[True], np.abs(np.diff(k)) > tolerance])
+            # DEBUGGING: use to avoid stripping repeated values
+            # unique = lambda k: np.ones_like(k, dtype=bool)
+            idata_u, qdata_u = unique(idata), unique(qdata)
+            tbins = ( times_us(times[idata_u] + self._initial_wait), times_us(times[qdata_u] + self._initial_wait) )
+            txbins = ( tx_real(idata[idata_u]), tx_real(qdata[qdata_u]) )
+            return tbins, txbins
 
         for key, (times, vals) in seq_dict.items():
             # each possible dictionary entry returns a tuple (even if one element) for the binary dictionary to send to flocompile
-            tbin = times_us(times + self._initial_wait)
+            tbin = times_us(times + self._initial_wait),
             if key in ['tx0_i', 'tx0_q', 'tx1_i', 'tx1_q']:
                 valbin = tx_real(vals),
                 keybin = key,
             elif key in ['tx0', 'tx1']:
-                valbin = tx_complex(vals)
+                tbin, valbin = tx_complex(times, vals)
                 keybin = key + '_i', key + '_q'
             elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2',
                          'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
@@ -193,7 +201,7 @@ class Experiment:
                 # user the illusion of being able to output on several
                 # channels in parallel
                 if self._gpa_fhdo_offset_time:
-                    tbin = times_us(times + channel*self._gpa_fhdo_offset_time + self._initial_wait)
+                    tbin = times_us(times + channel*self._gpa_fhdo_offset_time + self._initial_wait),
 
             elif key in ['rx0_rate', 'rx1_rate']:
                 keybin = key,
@@ -211,8 +219,8 @@ class Experiment:
                 warnings.warn("Unknown flocra experiment dictionary key: " + key)
                 continue
 
-            for k, v in zip(keybin, valbin):
-                intdict[k] = (tbin, v)
+            for t, k, v in zip(tbin, keybin, valbin):
+                intdict[k] = (t, v)
 
         return intdict
 
@@ -302,16 +310,19 @@ class Experiment:
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
                                              ), dtype=np.uint32 )
 
-    def plot_sequence(self, axes=None):
-        """ axes: 4-element tuple of axes upon which the TX, gradients, RX and digital I/O plots will be drawn.
-        If not provided, plot_sequence() will create its own. """
-        if axes is None:
-            _, axes = plt.subplots(4, 1, figsize=(12,8), sharex='col')
+        self._seq_compiled = True
 
-        (txs, grads, rxs, ios) = axes
+    def get_flodict(self, intd=None):
+        """Calculate floating-point dictionaries based on the data inside the
+        Experiment class so far -- useful for plotting or testing the sequence"""
 
-        if not self._seq_compiled:
-            self.compile()
+        if intd is None:
+            if not self._seq_compiled:
+                self.compile()
+
+            intd = self._seq
+
+        flodict = {}
 
         def convert_t(t_bin, y):
             # add a zero event in the beginning, and shift the times to the 'user frame'
@@ -320,41 +331,81 @@ class Experiment:
             y2 = np.concatenate( ([0], y) )
             return t, y2
 
+        # Convert TX channels
+        for txl in ['tx0_i', 'tx0_q', 'tx1_i', 'tx1_q']:
+            try:
+                t_bin, tx_bin = intd[txl]
+                t, tx = convert_t(t_bin, tx_bin.astype(np.int16) / 32768)
+                flodict[txl] = (t, tx)
+            except KeyError:
+                continue
+
+        # Convert gradient channels
+        for gradl in self.gradb.keys():
+            try:
+                t_bin, grad_bin = intd[gradl]
+                t, grad = convert_t(t_bin, self.gradb.bin2float(grad_bin) )
+                flodict[gradl] = (t, grad)
+            except KeyError:
+                continue
+
+        # Convert RX enable channels
+        for rxl in ['rx0_en', 'rx1_en']:
+            try:
+                t_bin, rx = intd[rxl]
+                t, rx = convert_t(t_bin, rx)
+                flodict[rxl] = (t, rx)
+            except KeyError:
+                continue
+
+        # Convert digital outputs
+        for iol in ['tx_gate', 'rx_gate', 'trig_out', 'leds']:
+            try:
+                t_bin, io = intd[iol]
+                t, io = convert_t(t_bin, io)
+                if iol == 'leds':
+                    io = io.astype(np.uint8).astype(float) / 256
+                    flodict[iol] = (t, io)
+            except KeyError:
+                continue
+
+        return flodict
+
+    def plot_sequence(self, axes=None):
+        """ axes: 4-element tuple of axes upon which the TX, gradients, RX and digital I/O plots will be drawn.
+        If not provided, plot_sequence() will create its own. """
+        if axes is None:
+            _, axes = plt.subplots(4, 1, figsize=(12,8), sharex='col')
+
+        (txs, grads, rxs, ios) = axes
+
+        fd = self.get_flodict()
+
         # Plot TX channels
         for txl in ['tx0_i', 'tx0_q', 'tx1_i', 'tx1_q']:
             try:
-                t_bin, tx_bin = self._seq[txl]
-                t, tx = convert_t(t_bin, tx_bin.astype(np.int16) / 32768)
-                txs.step(t, tx, where='post', label=txl)
+                txs.step(*fd[txl], where='post', label=txl)
             except KeyError:
                 continue
 
         # Plot gradient channels
         for gradl in self.gradb.keys():
             try:
-                t_bin, grad_bin = self._seq[gradl]
-                t, grad = convert_t(t_bin, self.gradb.bin2float(grad_bin) )
-                grads.step(t, grad, where='post', label=gradl)
+                grads.step(*fd[gradl], where='post', label=gradl)
             except KeyError:
                 continue
 
         # Plot RX enable channels
         for rxl in ['rx0_en', 'rx1_en']:
             try:
-                t_bin, rx = self._seq[rxl]
-                t, rx = convert_t(t_bin, rx)
-                rxs.step(t, rx, where='post', label=rxl)
+                rxs.step(*fd[rxl], where='post', label=rxl)
             except KeyError:
                 continue
 
         # Plot digital outputs
         for iol in ['tx_gate', 'rx_gate', 'trig_out', 'leds']:
             try:
-                t_bin, io = self._seq[iol]
-                t, io = convert_t(t_bin, io)
-                if iol == 'leds':
-                    io = io.astype(np.uint8).astype(float) / 256
-                ios.step(t, io, where='post', label=iol)
+                ios.step(*fd[iol], where='post', label=iol)
             except KeyError:
                 continue
 
@@ -363,6 +414,7 @@ class Experiment:
             ax.grid(True)
 
         ios.set_xlabel(r'time ($\mu$s)')
+        return fd
 
     def run(self):
         """ compile the TX and grad data, send everything over.

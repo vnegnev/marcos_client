@@ -24,9 +24,9 @@ class ModelTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # TODO make this check for a file first
-        os.system("make -j4 -s -C " + os.path.join(flocra_sim_path, "build"))
-        os.system("fallocate -l 516KiB /tmp/marcos_server_mem")
-        os.system("killall flocra_sim") # in case other instances were started earlier
+        subprocess.call(["make", "-j4", "-s", "-C", os.path.join(flocra_sim_path, "build")])
+        subprocess.call(["fallocate", "-l", "516KiB", "/tmp/marcos_server_mem"])
+        subprocess.call(["killall", "flocra_sim"], stderr=subprocess.DEVNULL) # in case other instances were started earlier
 
         warnings.simplefilter("ignore", fc.FloServerWarning)
 
@@ -526,6 +526,19 @@ class ModelTest(unittest.TestCase):
         d = {'tx0_i': (np.array([0, 100]), np.array([1, 0])) }
         refl, siml = compare_expt_dict(d, "test_auto_leds_expt", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
+
+    def test_tx_complex_expt(self):
+        """ Test whether the Experiment class removes duplicate i/q entries for complex TX data """
+        max_rem_instr = fc.max_removed_instructions
+        fc.max_removed_instructions = 1
+        expt_args = {'auto_leds': False}
+        d = {'tx0': (np.array([0, 10, 15, 20, 30, 50]), np.array([1-1j, 1+1j, 1j, -1+1j, -1, -1-1j]))}
+        with warnings.catch_warnings():
+            warnings.filterwarnings("error", category=fc.FloRemovedInstructionWarning)
+            refl, siml = compare_expt_dict(d, "test_tx_complex_expt", self.s, self.p, **expt_args)
+
+        # restore to default
+        fc.max_removed_instructions = max_rem_instr
 
 if __name__ == "__main__":
     unittest.main()
