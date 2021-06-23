@@ -21,7 +21,7 @@ if __name__ == "__main__":
     #                      usecols=(0,1),
     #                      names=True)
 
-    data = np.loadtxt(sys.argv[1], skiprows=1, delimiter=',')
+    data = np.loadtxt(sys.argv[1], skiprows=2, delimiter=',')
     data[1:, 0] = data[1:, 0] - data[1, 0] + 1 # remove dead time in the beginning taken up by simulated memory writes
 
     time_us = data[:,0]/fpga_clk_freq_MHz

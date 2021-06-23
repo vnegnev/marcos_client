@@ -402,7 +402,7 @@ class GPAFHDO:
                 # just plot residuals of data
                 plt.plot(grad_vals, observed_grad_vals - grad_vals, label='Residuals')
                 plt.xlabel('Grad vals (normalised, [-1, 1])')
-                plt.ylabel('Observed grad vals (normalised, [-1, 1])')
+                plt.ylabel('Residuals (observed - expected grad vals) (normalised, [-1, 1])')
                 plt.show()
             else:
 

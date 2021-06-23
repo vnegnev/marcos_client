@@ -137,6 +137,8 @@ class Experiment:
     def server_command(self, server_dict):
         return sc.command(server_dict, self._s, self._print_infos, self._assert_errors)
 
+    def get_rx_ts(self):
+        return self._rx_ts
 
     def set_lo_freq(self, lo_freq):
         # lo_freq: either a single floating-point value, or an iterable of up to three values for each flocra NCO
@@ -173,7 +175,7 @@ class Experiment:
             -- returns a tuple with repeated elements removed"""
             idata, qdata = farr.real, farr.imag
             unique = lambda k: np.concatenate([[True], np.abs(np.diff(k)) > tolerance])
-            # DEBUGGING: use to avoid stripping repeated values
+            # DEBUGGING: use the below lambda instead to avoid stripping repeated values
             # unique = lambda k: np.ones_like(k, dtype=bool)
             idata_u, qdata_u = unique(idata), unique(qdata)
             tbins = ( times_us(times[idata_u] + self._initial_wait), times_us(times[qdata_u] + self._initial_wait) )
@@ -281,6 +283,7 @@ class Experiment:
         ar1 = np.arange(wds + 1, dtype=int)
         ow = np.ones(wds + 1, dtype=int)
         ow[-1] = 0
+
         initial_cfg.update({
             'rx0_rate': ( tstart + rx_wait + ar0, np.array(rx0_words) ),
             'rx1_rate': ( tstart + rx_wait + ar0, np.array(rx1_words) ),
@@ -566,9 +569,18 @@ def test_gpa_calibration():
     expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=5)
     expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=1, test_cal=True)
 
+def test_lo_change():
+    expt = Experiment(auto_leds=False)
+    expt.add_flodict({'tx0': ( np.array([1]), np.array([0.5]) )})
+    expt.compile()
+    expt.set_lo_freq(2)
+    expt.compile()
+    # expt.run()
+    # expt.close_server(only_if_sim=True)
+
 if __name__ == "__main__":
     if False:
-        test_rx_scaling(lo_freq=8,
+        test_rx_scaling(lo_freq=1,
                         rf_amp=0.5,
                         rf_steps=False,
                         rx_time=60,
@@ -579,5 +591,8 @@ if __name__ == "__main__":
                         # rx_periods=np.arange(10, 400, 1),
                         plot_rx=True)
 
-    if True:
+    if False:
         test_gpa_calibration()
+
+    if True:
+        test_lo_change()
