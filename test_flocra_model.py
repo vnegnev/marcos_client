@@ -539,6 +539,22 @@ class ModelTest(unittest.TestCase):
 
         # restore to default
         fc.max_removed_instructions = max_rem_instr
+        self.assertEqual(refl, siml)
+
+    def test_lo_change_expt(self):
+        """ Test whether the Experiment class can handle changes in LO frequency, followed by being rerun """
+        expt_args = {'lo_freq': 1, 'auto_leds': False}
+        d = {'tx0': (np.array([0, 1]), np.array([0.5, 0])), 'rx0_en': (np.array([2, 3]), np.array([1, 0]))}
+
+        def change_lo(e):
+            e.run() # compile internally
+            e.set_lo_freq(2)
+            return e.run() # compile internally
+
+        # with warnings.catch_warnings():
+        #     warnings.filterwarnings("ignore", category=RuntimeWarning) # catch GPA-FHDO error due to re-initialisation
+        refl, siml = compare_expt_dict(d, "test_lo_change_expt", self.s, self.p, run_fn=change_lo, **expt_args)
+        self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
     unittest.main()

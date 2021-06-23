@@ -106,7 +106,6 @@ class Experiment:
             # auto-set the initial wait to be long enough for initial gradient configuration to finish, plus 1us for miscellaneous startup
             self._initial_wait = 1 + 1/grad_max_update_rate
 
-        self._ultimate_time = 0
         self._auto_leds = auto_leds
 
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
@@ -227,7 +226,7 @@ class Experiment:
         return intdict
 
     def add_intdict(self, seq_intdict, append=True):
-        """ Add an integer-format dictionary to the sequence, or replace the old one """
+        """ Add an integer-format dictionary to the sequence, or replace the old (time, value) tuples with new ones """
         if self._seq is None:
             self._seq = {}
 
@@ -235,11 +234,8 @@ class Experiment:
             if name in self._seq.keys() and append:
                 a, b = self._seq[name]
                 self._seq[name] = ( np.append(a, sb[0]), np.append(b, sb[1]) )
-                if sb[0][-1] > self._ultimate_time:
-                    self._ultimate_time = sb[0][-1]
             else:
                 self._seq[name] = sb
-                self._ultimate_time = sb[0][-1]
 
     def add_flodict(self, flodict, append=True):
         """ Add a floating-point dictionary to the sequence """
@@ -300,13 +296,21 @@ class Experiment:
         # Automatic LED scan
         if self._auto_leds:
             led_steps = 256
-            if self._ultimate_time < 256:
-                led_steps = self._ultimate_time
-            led_times = np.linspace(tstart, self._ultimate_time + tstart, 256).astype(np.int64)
+
+            # find max time used in system
+            ultimate_time = 0
+            for k in self._seq:
+                loc_last_time = self._seq[k][0][-1]
+                if loc_last_time > ultimate_time:
+                    ultimate_time = loc_last_time
+
+            if ultimate_time < 256:
+                led_steps = ultimate_time
+            led_times = np.linspace(tstart, ultimate_time + tstart, 256).astype(np.int64)
             led_vals = np.linspace(1, 256, led_steps).astype(np.uint32)
             initial_cfg.update({ 'leds': (led_times, led_vals) }) # should overlap with any previous LED settings
 
-        self.add_intdict(initial_cfg)
+        self.add_intdict(initial_cfg, append=False)
 
         self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
@@ -575,7 +579,7 @@ def test_lo_change():
     expt.compile()
     expt.set_lo_freq(2)
     expt.compile()
-    # expt.run()
+    expt.run()
     # expt.close_server(only_if_sim=True)
 
 if __name__ == "__main__":
@@ -594,5 +598,5 @@ if __name__ == "__main__":
     if False:
         test_gpa_calibration()
 
-    if True:
+    if False:
         test_lo_change()

@@ -154,10 +154,17 @@ def compare_dict(source_dict, ref_fname, sock, proc,
             siml = sim.read().splitlines()
         return refl, siml
 
+def expt_run(e):
+    """ Function for customising how compare_expt_dict() runs Experiments; e.g. for testing different Experiment methods etc
+    (see test_lo_change_expt in test_flocra_model.py for an example)"""
+    rx_data, msgs = e.run()
+    return rx_data, msgs
+
 def compare_expt_dict(source_dict, ref_fname, sock, proc,
                       # initial_bufs=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint16),
                       # latencies=np.zeros(fc.FLOCRA_BUFS, dtype=np.uint32),
                       ignore_start_delay=True,
+                      run_fn=expt_run,
                       **kwargs):
     """Arguments the same as for compare_dict(), except that the source
     dictionary is in floating-point units, and the kwargs are passed
@@ -169,7 +176,7 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
     e = exp.Experiment(prev_socket=sock, seq_dict=source_dict, **kwargs)
 
     # run simulation
-    rx_data, msgs = e.run()
+    rx_data, msgs = run_fn(e)
 
     # halt simulation
     sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), sock)
