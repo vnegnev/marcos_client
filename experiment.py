@@ -69,6 +69,7 @@ class Experiment:
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
                  fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
                  set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
+                 allow_user_init_cfg=False, # allow user-defined alteration of flocra configuration set by init, namely RX rate, LO properties etc; see the compile() method for details
                  halt_and_reset=False, # upon connecting to the server, halt any existing sequences that may be running
                  flush_old_rx=False, # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always read them out and clear them before running a sequence. More advanced manual code can read RX from existing sequences.
                  ):
@@ -129,6 +130,7 @@ class Experiment:
         self._fix_cic_scale = fix_cic_scale
         self._set_cic_shift = set_cic_shift
         self._flush_old_rx = flush_old_rx
+        self._allow_user_init_cfg = allow_user_init_cfg
 
     def __del__(self):
         self._s.close()
@@ -310,7 +312,8 @@ class Experiment:
             led_vals = np.linspace(1, 256, led_steps).astype(np.uint32)
             initial_cfg.update({ 'leds': (led_times, led_vals) }) # should overlap with any previous LED settings
 
-        self.add_intdict(initial_cfg, append=False)
+        # do not clear relevant dictionary values if user-defined configuration of init parameters at runtime is allowed
+        self.add_intdict(initial_cfg, append=self._allow_user_init_cfg)
 
         self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
@@ -464,7 +467,8 @@ class Experiment:
 
 def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
 
-    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz, fix_cic_scale=False, set_cic_shift=False, flush_old_rx=True)
+    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz,
+                      fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True)
     tr_t = 0
     tr_period = rx_time + rx_padding
     rx_lengths = []
@@ -583,16 +587,18 @@ def test_lo_change():
     # expt.close_server(only_if_sim=True)
 
 if __name__ == "__main__":
-    if False:
-        test_rx_scaling(lo_freq=1,
+    if True:
+        test_rx_scaling(lo_freq=20,
                         rf_amp=0.5,
                         rf_steps=False,
-                        rx_time=60,
-                        rx_padding=20,
+                        rx_time=30,
+                        rx_padding=10,
                         # rx_periods = np.ones(10, dtype=int)*30,
                         # rx_periods=np.arange(4, 400, 1),
-                        rx_periods=np.arange(4, 400, 1),
+                        # rx_periods=np.arange(4, 40, 1),
+                        rx_periods=np.arange(4, 100, 1),
                         # rx_periods=np.arange(10, 400, 1),
+                        # rx_periods=np.array([5, 10, 20, 50, 100, 200, 500]),
                         plot_rx=True)
 
     if False:
