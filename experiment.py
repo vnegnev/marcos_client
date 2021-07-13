@@ -468,7 +468,7 @@ class Experiment:
 def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
 
     expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz,
-                      fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True)
+                      fix_cic_scale=False, set_cic_shift=True, allow_user_init_cfg=True, flush_old_rx=True)
     tr_t = 0
     tr_period = rx_time + rx_padding
     rx_lengths = []
