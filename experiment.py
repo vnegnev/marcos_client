@@ -513,7 +513,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
     for rt in rx_periods:
         expt.add_flodict( single_pulse_tr( tr_t , rt) )
         tr_t += tr_period
-        rx_lengths.append( int(rx_time * fpga_clk_freq_MHz / rt) + 1)
+        rx_lengths.append( int(rx_time * fpga_clk_freq_MHz / rt) )
 
     rxd, msgs = expt.run()
     expt.close_server(True)
