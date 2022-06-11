@@ -317,7 +317,7 @@ def rx_short():
     raw_data = raw_data[:addr] # truncate
     return raw_data
 
-def loopback(cic0_decimation=7, cic1_decimation=10):
+def loopback(cic0_decimation=10, cic1_decimation=14):
     lo_freq0 = 4 # MHz
     lo_freq1 = 4
     lo_freq2 = 1.5
@@ -356,11 +356,19 @@ def loopback(cic0_decimation=7, cic1_decimation=10):
     raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch, 0, 0); addr += 1
     # raw_data[addr] = instb(RX1_CTRL, 0, 0x0000); addr += 1
     # take them out of reset later
-    raw_data[addr] = rx_ctrl(40, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
+    
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
     raw_data[addr] = instb(RX0_RATE, 0, cic0_decimation); addr += 1
     raw_data[addr] = instb(RX1_RATE, 0, cic1_decimation); addr += 1
     # briefly signal that there's a new rate
-    raw_data[addr] = rx_ctrl(40, 0, 0, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
+    # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
+    # end the new rate flag (the buffers are not empty so no offset time is needed)
+    raw_data[addr] = rx_ctrl(0, 0, 0, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1    # set shift prescaling
+    raw_data[addr] = instb(RX0_RATE, 0, 0x4000 | 52); addr += 1
+    raw_data[addr] = instb(RX1_RATE, 0, 0x4000 | 49); addr += 1
+    raw_data[addr] = rx_ctrl(0, 0, 0, 1, 1, dds_demod_ch, dds_demod_ch); addr += 1
+
     # raw_data[addr] = instb(RX1_CTRL, 49, 0xf000 | cic_decimation); addr += 1
     # end the new rate flag and start acquisition (the buffers are not empty so no offset time is needed)
     raw_data[addr] = rx_ctrl(0, 1, 1, 0, 0, dds_demod_ch, dds_demod_ch); addr += 1
@@ -607,10 +615,10 @@ if __name__ == "__main__":
         rxd = res[4]['run_seq']
         # offsets = 1e8
         offsets = 0
-        rx0_i = np.array(rxd['rx0_i'], dtype=np.int32)
-        rx0_q = np.array(rxd['rx0_q'], dtype=np.int32)+offsets
-        rx1_i = np.array(rxd['rx1_i'], dtype=np.int32)+2*offsets
-        rx1_q = np.array(rxd['rx1_q'], dtype=np.int32)+3*offsets
+        rx0_i = np.array(np.array(rxd['rx0_i']), dtype=np.int32)
+        rx0_q = np.array(np.array(rxd['rx0_q']), dtype=np.int32)+offsets
+        rx1_i = np.array(np.array(rxd['rx1_i']), dtype=np.int32)+2*offsets
+        rx1_q = np.array(np.array(rxd['rx1_q']), dtype=np.int32)+3*offsets
         plt.plot(rx0_i)
         plt.plot(rx0_q)
         plt.plot(rx1_i)
