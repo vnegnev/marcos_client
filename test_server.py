@@ -27,7 +27,10 @@ class ServerTest(unittest.TestCase):
         self.s.close()
 
     def test_version(self):
-        versions = [ (1,0,1), (1,0,5), (1,3,100), (1,3,255), (2,5,7), (255,255,255) ]
+        full_test = True  # test a range of different versions; otherwise just the current one
+        debug_replies = False
+        def diff_equal(client_ver):
+            return {'errors': ['not all client commands were understood']}
 
         def diff_info(client_ver):
             return {'infos': ['Client version {:d}.{:d}.{:d}'.format(*client_ver) +
@@ -47,31 +50,73 @@ class ServerTest(unittest.TestCase):
                                   version_major, version_minor, version_debug),
                                'not all client commands were understood']}
 
-        # results =
-        expected_outcomes = [diff_info, diff_info, diff_warning, diff_warning, diff_error, diff_error]
+        if full_test:
+            versions = [ (1,0,1), (1,0,5), (1,3,100), (1,3,255), (2,5,7), (255,255,255) ]
+            expected_outcomes = [diff_info, diff_equal, diff_warning, diff_warning, diff_error, diff_error]
+        else:
+            versions = [ (1,0,1) ]
+            expected_outcomes = [diff_info]
+
 
         for v, ee in zip(versions, expected_outcomes):
+            # send an unknown command to make sure system handles it gracefully
             packet = construct_packet({'asdfasdf':1}, self.packet_idx, version=v)
             reply = send_packet(packet, self.s)
-            self.assertEqual(reply,
-                             [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1},
-                              ee(v)])
+            expected_reply = [reply_pkt, 1, 0, version_full, {'UNKNOWN1': -1}, ee(v)]
+            if debug_replies:
+                print("Reply         : ", reply)
+                print("Expected reply: ", expected_reply)
+                if reply == expected_reply:
+                    print("Equal")
+                else:
+                    print("Not equal! Debugging...")
+                    st()
+            self.assertEqual(reply, expected_reply)
 
     def test_idle(self):
-        """ Make sure the server state is idle, all the RX and TX buffers are empty, etc."""
-
+        """ Make sure the server state is (or becomes) idle, all the RX and TX buffers are empty, etc."""
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
         if real == "hardware" or real == "simulation":
-            fifo_empties = 0xffffff
+            buf_empties = 0xffffff
         elif real == "software":
-            fifo_empties = 0
+            buf_empties = 0
 
         packet = construct_packet({'regstatus': 0})
+
+        def check_if_idle():
+            reply = send_packet(packet, self.s)
+            registers = reply[4]['regstatus']
+
+            # registers
+            exec_reg = registers[0]
+            status_reg = registers[1]
+            status_latch_reg = registers[2]
+
+            # status fields
+            fhdo_busy = 0x20000
+            ocra1_busy = 0x10000
+
+            # status latch fields
+            fhdo_err = 0x4
+            ocra1_err = 0x2
+            ocra1_data_lost = 0x1
+
+            if (status_latch_reg & fhdo_err) or (status_latch_reg & ocra1_err) or (status_latch_reg & ocra1_data_lost):
+                warnings.warn("Gradient error occurred during test_idle! Might have been caused by another of the tests.")
+
+            if (status_reg & fhdo_busy) or (status_reg & ocra1_busy):
+                return False
+
+            return True
+
+        for k in range(1000):
+            if check_if_idle():
+                break
+
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, 0, 0, 0, 0, fifo_empties, 0]}, {}])
+                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, 0, 0, 0, 0, buf_empties, 0]}, {}])
 
-    @unittest.skip("flocra devel")
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
         reply = send_packet(packet, self.s)
@@ -81,6 +126,7 @@ class ServerTest(unittest.TestCase):
                           {'errors': ['no commands present or incorrectly formatted request']}])
 
     def test_bus(self):
+        print_speeds = False
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
         if real == "hardware":
             deltas = (0.2, 2, 2)
@@ -100,24 +146,38 @@ class ServerTest(unittest.TestCase):
         null_t, read_t, write_t = reply[4]['test_bus']
 
         loops_norm = loops/1e6
+        if print_speeds:
+            print(f"{real} data: null_t: {null_t/loops:.2f}, read_t: {read_t/loops:.2f}, write_t: {write_t/loops:.2f} us / cycle")
         if real == "hardware":
             self.assertAlmostEqual(null_t/1e3, times[0] * loops_norm, delta = deltas[0] * loops_norm) # 1 flop takes ~1.5 ns on average
             self.assertAlmostEqual(read_t/1e3, times[1] * loops_norm, delta = deltas[1] * loops_norm) # 1 read takes ~141.9 ns on average
             self.assertAlmostEqual(write_t/1e3, times[2] * loops_norm, delta = deltas[2] * loops_norm) # 1 write takes ~157.9 ns on average
-        else:
-            print("\nnull_t, read_t, write_t: {:f}, {:f}, {:f} us / cycle".format(null_t/loops, read_t/loops, write_t/loops))
+        elif real == "simulation":
+            # Might not be true if you're on a slow computer, but should be fine for most post-2015 PCs
+            self.assertLess(null_t/loops, 1.0)
+            self.assertLess(read_t/loops, 100.0)
+            self.assertLess(write_t/loops, 100.0)
 
     @unittest.skip("flocra devel")
-    def test_io(self):
+    def test_net(self):
+        real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
+        if real == "hardware":
+            loops = [10, 1000, 100000]
+            times = (1.5, 131.0, 158.5) # upper-bound times for network transfers
+        elif real == "simulation":
+            loops = [10, 1000, 100000]
+            times = (1.5, 131.0, 158.5) # upper-bound times for network transfers
+        elif real == "software":
+            loops = [10, 1000, 100000]
+            times = (1.5, 131.0, 158.5) # upper-bound times for network transfers
         packet = construct_packet({'test_net':10}, self.packet_idx)
+        # VN: continue here
 
-    @unittest.skip("flocra devel")
     def test_fpga_clk(self):
         packet = construct_packet({'fpga_clk': [0xdf0d, 0x03f03f30, 0x00100700]})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply, [reply_pkt, 1, 0, version_full, {'fpga_clk': 0}, {}])
 
-    @unittest.skip("flocra devel")
     def test_fpga_clk_partial(self):
         packet = construct_packet({'fpga_clk': [0xdf0d,  0x03f03f30]})
         reply = send_packet(packet, self.s)
@@ -191,6 +251,7 @@ class ServerTest(unittest.TestCase):
 
     @unittest.skipUnless(grad_board == "gpa-fhdo", "requires GPA-FHDO board")
     def test_grad_adc(self):
+        print_adc_reads = False
         # initialise SPI
         spi_div = 40
         upd = False # update on MSB writes
@@ -207,9 +268,9 @@ class ServerTest(unittest.TestCase):
 
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
         if real in ['simulation', 'software']:
-            expected = [ 0, 0, 0, 0, 0 ]
+            expected = [ 0 ] * ( len(init_words) - 1 )
         else:
-            expected = [ 0xffff, 0x0600, 0x0600, 0x0600, 0x0600 ]
+            expected = [ 0xffff ] + [0x0600] * ( len(init_words) - 2)
 
         readback = []
 
@@ -222,40 +283,14 @@ class ServerTest(unittest.TestCase):
 
             # status reg = 5, ADC word is lower 16 bits
             adc_read = send_packet(construct_packet({'regrd': 5}), self.s)[4]['regrd']
-            if adc_read != 0:
+            if print_adc_reads and adc_read != 0:
                 print("ADC read: ", adc_read)
-            time.sleep(0.05)
+            time.sleep(0.01)
             readback.append( adc_read & 0xffff )
             # if readback != r:
             #     warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(w, readback) )
 
         self.assertEqual(expected, readback[1:]) # ignore 1st word, since it depends on the history of ADC transfers
-
-    @unittest.skip("flocra devel")
-    def test_state(self):
-        # Check will behave differently depending on the STEMlab version we're connecting to (and its clock frequency)
-        true_rx_freq = '13.440000' if fpga_clk_freq_MHz == 122.88 else '13.671875'
-        tx_sample_duration = '0.081380' if fpga_clk_freq_MHz == 122.88 else '0.080000'
-        rx_sample_duration = 0
-
-        packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
-                                   'tx_div': 10,
-                                   'rx_div': 250,
-                                   'grad_div': (303, 32),
-                                   'state': fpga_clk_freq_MHz * 1e6
-                                   })
-        reply = send_packet(packet, self.s)
-
-        self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full,
-                          {'lo_freq': 0, 'tx_div': 0, 'rx_div': 0, 'grad_div': 0,
-                           'state': 0},
-                          {'infos': [
-                              'LO frequency [CHECK]: 13.440000 MHz',
-                              'TX sample duration [CHECK]: 0.070000 us',
-                              'RX sample duration [CHECK]: 2.034505 us',
-                              'gradient sample duration (*not* DAC sampling rate): 2.149000 us',
-                              'gradient SPI transmission duration: 5.558000 us']}])
 
     def test_leds(self):
         # This test is mainly for the simulator, but will alter hardware LEDs too
