@@ -75,11 +75,13 @@ class Experiment:
                  ):
 
         # create socket early so that destructor works
+        self._close_socket = True
         if prev_socket is None:
             self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._s.connect( (ip_address, port) )
         else:
             self._s = prev_socket
+            self._close_socket = False # do not close previous socket
 
         self.set_lo_freq(lo_freq)
 
@@ -133,7 +135,8 @@ class Experiment:
         self._allow_user_init_cfg = allow_user_init_cfg
 
     def __del__(self):
-        self._s.close()
+        if self._close_socket:
+            self._s.close()
 
     def server_command(self, server_dict):
         return sc.command(server_dict, self._s, self._print_infos, self._assert_errors)
@@ -498,7 +501,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
 
         value_dict = {
             'tx0': tx_seq, 'tx1': tx_seq,
-            # 'rx0_en': rx_seq,
+            'rx0_en': rx_seq,
             'rx1_en': rx_seq,
             'rx0_rate': rate_seq, 'rx1_rate': rate_seq,
             'rx0_rate_valid': rate_en_seq, 'rx1_rate_valid': rate_en_seq,
@@ -521,13 +524,12 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
     # rx_lengths_a = np.array(rx_lengths)
     # print("RX lengths from calculation: ", rx_lengths)
 
-    # rx0_mag = np.abs(rxd['rx0'])
-    rx1_mag = np.abs(rxd['rx1'])
-    plt.plot(rx1_mag);plt.show()
-
     pulse_means = []
 
     if plot_rx:
+        rx0_mag = np.abs(rxd['rx0'])
+        rx1_mag = np.abs(rxd['rx1'])
+
         initial_excess = 5 # amount to throw away from the start of each acquisition
         M = 0
 
@@ -574,8 +576,17 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
 
 def test_gpa_calibration():
     expt = Experiment(init_gpa=True)
-    expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=5)
-    expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=1, test_cal=True)
+
+    # test calibration on GPA-FHDO capable of driving a full current load
+    # if false, just test over a narrow range
+    full_current = True
+
+    if full_current:
+        expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=5)
+        expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=1, test_cal=True)
+    else:
+        expt.gradb.calibrate(channels=[0], max_current=0.05, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=2)
+        expt.gradb.calibrate(channels=[0], max_current=0.05, num_calibration_points=30, averages=1, test_cal=True)
 
 def test_lo_change():
     expt = Experiment(auto_leds=False)
@@ -587,11 +598,12 @@ def test_lo_change():
     # expt.close_server(only_if_sim=True)
 
 if __name__ == "__main__":
-    if True:
-        test_rx_scaling(lo_freq=20,
-                        rf_amp=0.5,
+    print("No tests are run.")
+    if False:
+        test_rx_scaling(lo_freq=0.5,
+                        rf_amp=1,
                         rf_steps=False,
-                        rx_time=30,
+                        rx_time=300,
                         rx_padding=10,
                         # rx_periods = np.ones(10, dtype=int)*30,
                         # rx_periods=np.arange(4, 400, 1),
@@ -599,7 +611,7 @@ if __name__ == "__main__":
                         rx_periods=np.arange(4, 100, 1),
                         # rx_periods=np.arange(10, 400, 1),
                         # rx_periods=np.array([5, 10, 20, 50, 100, 200, 500]),
-                        plot_rx=True)
+                        plot_rx=False)
 
     if False:
         test_gpa_calibration()
