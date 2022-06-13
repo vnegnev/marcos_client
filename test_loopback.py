@@ -18,8 +18,8 @@ if __name__ == "__main__":
     num_grad_channels = 3
     grad_interval = 10.003 # us between [num_grad_channels] channel updates
 
-    do_single_test = True
-    do_jitter_test = False
+    do_single_test = False
+    do_jitter_test = True
 
     if len(sys.argv) > 1 and "jitter" in sys.argv:
         do_jitter_test = True
@@ -59,7 +59,7 @@ if __name__ == "__main__":
                      #grad_pad=2,
                      )
     #tx_arr, grad_arr, cb, params = psi.interpret('../ocra-pulseq/test_files/test_loopback.seq')
-    od, pd = psi.interpret('test_files/test_loopback.seq')
+    od, pd = psi.interpret('test_loopback.seq')
     
     exp = ex.Experiment(lo_freq=lo_freq,
                         rx_t=pd['rx_t'],
@@ -95,10 +95,10 @@ if __name__ == "__main__":
         bad_data = []
 
         for d in data:
-            if np.abs(d[-1]) == 0.0:
-                bad_data.append(d)
+            if np.abs(d['rx0'][-1]) == 0.0:
+                bad_data.append(d['rx0'])
             else:
-                good_data.append(d)
+                good_data.append(d['rx0'])
 
         lgd = len(good_data)
         lbd = len(bad_data)
