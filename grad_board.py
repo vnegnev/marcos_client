@@ -235,8 +235,10 @@ class GPAFHDO:
                 trials -= 1 # try again
 
     def init_hw(self):
+        # write defaults
         init_words = [
-            0x00030100, # DAC sync reg
+            0x0005000a, # DAC trigger reg, soft reset of the chip
+            0x00030100, # DAC config reg, disable internal ref
             0x40850000, # ADC reset
             0x400b0600, 0x400d0600, 0x400f0600, 0x40110600, # input ranges for each ADC channel
             0x00088000, 0x00098000, 0x000a8000, 0x000b8000 # set each DAC channel to output 0
