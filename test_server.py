@@ -189,21 +189,20 @@ class ServerTest(unittest.TestCase):
                                       ]}
                           ])
 
+    @unittest.skipUnless(grad_board == "gpa-fhdo", "requires GPA-FHDO board")
     def test_grad_adc(self):
-        if grad_board != "gpa-fhdo":
-            return
-
         # initialise SPI
         spi_div = 40
         upd = False # update on MSB writes
         send_packet(construct_packet( {'direct': 0x00000000 | (2 << 0) | (spi_div << 2) | (0 << 8) | (upd << 9)} ), self.s)
 
-        # # ADC defaults
+        # ADC defaults, same as in grad_board.GPAFHDO.init_hw()
         init_words = [
-            0x00030100, # DAC sync reg
+            0x0005000a, # DAC trigger reg, soft reset of the chip
+            0x00030100, # DAC config reg, disable internal ref
             0x40850000, # ADC reset
             0x400b0600, 0x400d0600, 0x400f0600, 0x40110600, # input ranges for each ADC channel
-            # TODO: set outputs to ~0
+            0x00088000, 0x00098000, 0x000a8000, 0x000b8000 # set each DAC channel to output 0
         ]
 
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
@@ -222,7 +221,11 @@ class ServerTest(unittest.TestCase):
             # read ADC each time
 
             # status reg = 5, ADC word is lower 16 bits
-            readback.append( send_packet(construct_packet({'regrd': 5}), self.s)[4]['regrd'] & 0xffff )
+            adc_read = send_packet(construct_packet({'regrd': 5}), self.s)[4]['regrd']
+            if adc_read != 0:
+                print("ADC read: ", adc_read)
+            time.sleep(0.05)
+            readback.append( adc_read & 0xffff )
             # if readback != r:
             #     warnings.warn( "ADC data expected: 0x{:0x}, observed 0x{:0x}".format(w, readback) )
 
