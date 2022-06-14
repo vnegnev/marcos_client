@@ -15,7 +15,6 @@ from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 from server_comms import *
 
 class ServerTest(unittest.TestCase):
-
     # @classmethod
     # def setUpClass(cls):
     def setUp(self):
@@ -83,7 +82,9 @@ class ServerTest(unittest.TestCase):
 
         packet = construct_packet({'regstatus': 0})
 
-        def check_if_idle():
+        def check_status():
+            """Check status of the firmware, returning True if idle,
+            and always returning the last-read ADC value"""
             reply = send_packet(packet, self.s)
             registers = reply[4]['regstatus']
 
@@ -95,6 +96,7 @@ class ServerTest(unittest.TestCase):
             # status fields
             fhdo_busy = 0x20000
             ocra1_busy = 0x10000
+            fhdo_adc = 0xffff
 
             # status latch fields
             fhdo_err = 0x4
@@ -104,18 +106,21 @@ class ServerTest(unittest.TestCase):
             if (status_latch_reg & fhdo_err) or (status_latch_reg & ocra1_err) or (status_latch_reg & ocra1_data_lost):
                 warnings.warn("Gradient error occurred during test_idle! Might have been caused by another of the tests.")
 
+            adc_value = status_reg & fhdo_adc
+            idle = True
             if (status_reg & fhdo_busy) or (status_reg & ocra1_busy):
-                return False
+                idle = False
 
-            return True
+            return idle, adc_value
 
         for k in range(1000):
-            if check_if_idle():
+            idle, adc_value = check_status()
+            if idle:
                 break
 
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
-                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, 0, 0, 0, 0, buf_empties, 0]}, {}])
+                         [reply_pkt, 1, 0, version_full, {'regstatus': [0, adc_value, 0, 0, 0, buf_empties, 0]}, {}])
 
     def test_bad_packet(self):
         packet = construct_packet([1,2,3])
