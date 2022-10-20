@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 #
-# Integrated test of the flocra server, HDL and compiler.
+# Integrated test of the MaRCoS server, HDL and compiler.
 #
-# Script compiles and runs the flocra simulation (server + HDL model)
-# and sends it various binaries generated using the flocra client
-# compiler, then compares the simulated hardware output against the
-# expected output.
+# Script compiles and runs the MaRCoS Verilator simulation (server +
+# HDL model) and sends it various binaries generated using the MaRCoS
+# client compiler, then compares the simulated hardware output against
+# the expected output.
 #
 # To run a single test, use e.g.:
 # python -m unittest test_flocra_model.Modeltest.test_many_quick

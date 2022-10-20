@@ -21,7 +21,8 @@ class Experiment:
 
     lo_freq: local oscillator frequencies, MHz: either single float,
     iterable of two or iterable of three values. Control three
-    independent LOs. At least a single float must be supplied
+    independent LOs. At least a single float must be supplied.
+    If supplying 2 or 3 values, must also specify the rx_lo.
 
     rx_t: RF RX sampling time/s in microseconds; single float or tuple
     of two.
@@ -30,6 +31,9 @@ class Experiment:
     the three LO NCOs, 3 is DC. Single integer or tuple of two.  By
     default will use local oscillator 0 for both RX channels, unless
     otherwise specified.
+
+    Note: TX0 and TX1 will always be assigned to NCOs 0 and 1. NCO 2
+    is for free adjustment of the RX frequency relative to the TX.
 
     csv_file: path to a CSV execution file, which will be
     compiled with flocompile.py . If this is not supplied, the
