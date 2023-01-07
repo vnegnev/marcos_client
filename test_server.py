@@ -163,7 +163,7 @@ class ServerTest(unittest.TestCase):
             self.assertLess(read_t/loops, 100.0)
             self.assertLess(write_t/loops, 100.0)
 
-    @unittest.skip("flocra devel")
+    @unittest.skip("marga devel")
     def test_net(self):
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
         if real == "hardware":
@@ -192,7 +192,7 @@ class ServerTest(unittest.TestCase):
                           {'errors': ["you only provided some FPGA clock control words; check you're providing all 3"]}]
         )
 
-    @unittest.skip("flocra devel")
+    @unittest.skip("marga devel")
     def test_several_okay(self):
         packet = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
                                    'tx_div': 10,
@@ -216,7 +216,7 @@ class ServerTest(unittest.TestCase):
                               'gradient mem data bytes copied: 32768']}]
         )
 
-    @unittest.skip("flocra devel")
+    @unittest.skip("marga devel")
     def test_several_some_bad(self):
         # first, send a normal packet to ensure everything's in a known state
         packetp = construct_packet({'lo_freq': 0x7000000, # floats instead of uints
@@ -323,35 +323,35 @@ class ServerTest(unittest.TestCase):
         for k in range(2):
             reply = send_packet(packet, self.s)
 
-    def test_flo_mem(self):
-        flo_mem_bytes = 4 * 65536 # full memory
-        # flo_mem_bytes = 4 * 2 # several writes for testing
+    def test_mar_mem(self):
+        mar_mem_bytes = 4 * 65536 # full memory
+        # mar_mem_bytes = 4 * 2 # several writes for testing
 
         # everything should be fine
-        raw_data = bytearray(flo_mem_bytes)
-        for m in range(flo_mem_bytes):
+        raw_data = bytearray(mar_mem_bytes)
+        for m in range(mar_mem_bytes):
             raw_data[m] = m & 0xff
-        packet = construct_packet({'flo_mem' : raw_data})
+        packet = construct_packet({'mar_mem' : raw_data})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'flo_mem': 0},
-                          {'infos': ['flo mem data bytes copied: {:d}'.format(flo_mem_bytes)] }
+                          {'mar_mem': 0},
+                          {'infos': ['mar mem data bytes copied: {:d}'.format(mar_mem_bytes)] }
                           ])
 
         # a bit too much data
-        raw_data = bytearray(flo_mem_bytes + 1)
-        for m in range(flo_mem_bytes):
+        raw_data = bytearray(mar_mem_bytes + 1)
+        for m in range(mar_mem_bytes):
             raw_data[m] = m & 0xff
-        packet = construct_packet({'flo_mem' : raw_data})
+        packet = construct_packet({'mar_mem' : raw_data})
         reply = send_packet(packet, self.s)
         self.assertEqual(reply,
                          [reply_pkt, 1, 0, version_full,
-                          {'flo_mem': -1},
-                          {'errors': ['too much flo mem data: {:d} bytes > {:d} -- streaming not yet implemented'.format(flo_mem_bytes + 1, flo_mem_bytes)] }
+                          {'mar_mem': -1},
+                          {'errors': ['too much mar mem data: {:d} bytes > {:d} -- streaming not yet implemented'.format(mar_mem_bytes + 1, mar_mem_bytes)] }
                           ])
 
-    @unittest.skip("flocra devel")
+    @unittest.skip("marga devel")
     def test_acquire_simple(self):
         # For comprehensive tests, see test_loopback.py
         samples = 10

@@ -8,7 +8,7 @@
 # the expected output.
 #
 # To run a single test, use e.g.:
-# python -m unittest test_flocra_model.Modeltest.test_many_quick
+# python -m unittest test_marga_model.Modeltest.test_many_quick
 
 from test_base import *
 
@@ -24,26 +24,26 @@ class ModelTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # TODO make this check for a file first
-        subprocess.call(["make", "-j4", "-s", "-C", os.path.join(flocra_sim_path, "build")])
+        subprocess.call(["make", "-j4", "-s", "-C", os.path.join(marga_sim_path, "build")])
         subprocess.call(["fallocate", "-l", "516KiB", "/tmp/marcos_server_mem"])
-        subprocess.call(["killall", "flocra_sim"], stderr=subprocess.DEVNULL) # in case other instances were started earlier
+        subprocess.call(["killall", "marga_sim"], stderr=subprocess.DEVNULL) # in case other instances were started earlier
 
-        warnings.simplefilter("ignore", fc.FloServerWarning)
+        warnings.simplefilter("ignore", mc.MarServerWarning)
 
     def setUp(self):
         # start simulation
-        if flocra_sim_fst_dump:
-            self.p = subprocess.Popen([os.path.join(flocra_sim_path, "build", "flocra_sim"), "both", flocra_sim_csv, flocra_sim_fst],
+        if marga_sim_fst_dump:
+            self.p = subprocess.Popen([os.path.join(marga_sim_path, "build", "marga_sim"), "both", marga_sim_csv, marga_sim_fst],
                                       stdout=subprocess.DEVNULL,
                                       stderr=subprocess.STDOUT)
         else:
-            self.p = subprocess.Popen([os.path.join(flocra_sim_path, "build", "flocra_sim"), "csv", flocra_sim_csv],
+            self.p = subprocess.Popen([os.path.join(marga_sim_path, "build", "marga_sim"), "csv", marga_sim_csv],
                                       stdout=subprocess.DEVNULL,
                                       stderr=subprocess.STDOUT)
 
 
         # open socket
-        time.sleep(0.05) # give flocra_sim time to start up
+        time.sleep(0.05) # give marga_sim time to start up
 
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.s.connect((ip_address, port)) # only connect to local simulator
@@ -54,9 +54,9 @@ class ModelTest(unittest.TestCase):
         # self.p.kill() # if not already terminated
         self.s.close()
 
-        if flocra_sim_fst_dump:
+        if marga_sim_fst_dump:
             # open GTKWave
-            os.system("gtkwave " + flocra_sim_fst + " " + os.path.join(flocra_sim_path, "src", "flocra_sim.sav"))
+            os.system("gtkwave " + marga_sim_fst + " " + os.path.join(marga_sim_path, "src", "marga_sim.sav"))
 
     ## Tests are approximately in order of complexity
 
@@ -72,10 +72,10 @@ class ModelTest(unittest.TestCase):
 
     def test_long_time(self):
         """ State change on four buffers in parallel """
-        max_orig = fc.COUNTER_MAX
-        fc.COUNTER_MAX = 0xfff # temporarily reduce max time used by compiler
+        max_orig = mc.COUNTER_MAX
+        mc.COUNTER_MAX = 0xfff # temporarily reduce max time used by compiler
         refl, siml = compare_csv("test_long_time", self.s, self.p)
-        fc.COUNTER_MAX = max_orig
+        mc.COUNTER_MAX = max_orig
         self.assertEqual(refl, siml)
 
     def test_single_quick(self):
@@ -212,7 +212,7 @@ class ModelTest(unittest.TestCase):
         # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
         with self.assertWarns( RuntimeWarning, msg="expected gpa-fhdo error not observed") as cmr:
             refl, siml = compare_csv("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
-        with self.assertWarns( UserWarning, msg="expected flocompile warning not observed") as cmu:
+        with self.assertWarns( UserWarning, msg="expected marcompile warning not observed") as cmu:
             self.tearDown()
             self.setUp()
             refl, siml = compare_csv("test_fhd_too_fast", self.s, self.p, self_ref=False, **fhd_config)
@@ -298,7 +298,7 @@ class ModelTest(unittest.TestCase):
         # Run twice, to catch two different warnings (I couldn't find a more straightforward way to do this)
         with self.assertWarns( RuntimeWarning, msg="expected ocra1 error not observed") as cmr:
             refl, siml = compare_csv("test_oc1_too_fast", self.s, self.p, self_ref=False, **oc1_config)
-        with self.assertWarns( UserWarning, msg="expected flocompile warning not observed") as cmu:
+        with self.assertWarns( UserWarning, msg="expected marcompile warning not observed") as cmu:
             self.tearDown()
             self.setUp()
             refl, siml = compare_csv("test_oc1_too_fast", self.s, self.p, self_ref=False, **oc1_config)
@@ -320,8 +320,8 @@ class ModelTest(unittest.TestCase):
         series of warnings. Dict version"""
         reps = 2000
         d = {'tx0_i': ( np.arange(100, 100 + reps) , np.array([10000]*reps) )}
-        with self.assertWarns( fc.FloRemovedInstructionWarning,
-                               msg="expected flocompile warning not observed") as cmu:
+        with self.assertWarns( mc.MarRemovedInstructionWarning,
+                               msg="expected marcompile warning not observed") as cmu:
             refl, siml = compare_dict(d, "test_single", self.s, self.p)
         self.assertEqual(refl, siml)
 
@@ -529,16 +529,16 @@ class ModelTest(unittest.TestCase):
 
     def test_tx_complex_expt(self):
         """ Test whether the Experiment class removes duplicate i/q entries for complex TX data """
-        max_rem_instr = fc.max_removed_instructions
-        fc.max_removed_instructions = 1
+        max_rem_instr = mc.max_removed_instructions
+        mc.max_removed_instructions = 1
         expt_args = {'auto_leds': False}
         d = {'tx0': (np.array([0, 10, 15, 20, 30, 50]), np.array([1-1j, 1+1j, 1j, -1+1j, -1, -1-1j]))}
         with warnings.catch_warnings():
-            warnings.filterwarnings("error", category=fc.FloRemovedInstructionWarning)
+            warnings.filterwarnings("error", category=mc.MarRemovedInstructionWarning)
             refl, siml = compare_expt_dict(d, "test_tx_complex_expt", self.s, self.p, **expt_args)
 
         # restore to default
-        fc.max_removed_instructions = max_rem_instr
+        mc.max_removed_instructions = max_rem_instr
         self.assertEqual(refl, siml)
 
     def test_lo_change_expt(self):

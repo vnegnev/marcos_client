@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Basic hacks and tests for flocra system
+# Basic hacks and tests for marga system
 #
 
 import numpy as np
@@ -9,8 +9,8 @@ import socket, time
 from local_config import ip_address, port, grad_board, fpga_clk_freq_MHz
 from server_comms import *
 
-from flomachine import *
-import flocompile as fc
+from marmachine import *
+import marcompile as fc
 
 import pdb
 st = pdb.set_trace
@@ -31,7 +31,7 @@ def run_manual_test(data, interval=0.001, timeout=20):
 
         # mem data
         # data = np.zeros(65536, dtype=np.uint32)
-        command( {'flo_mem': data.tobytes()} , s)
+        command( {'mar_mem': data.tobytes()} , s)
 
         # Start execution
         command({'ctrl': 0x1}, s, print_infos=True)
@@ -62,7 +62,7 @@ def run_streaming_test(data):
         packet_idx = 0
 
         if False: # clear memory first
-            command( {'flo_mem': np.zeros(65536, dtype=np.uint32).tobytes()} , s)
+            command( {'mar_mem': np.zeros(65536, dtype=np.uint32).tobytes()} , s)
 
         # mem data
         rx_data, msgs = command({'run_seq': data.tobytes()} , s)
@@ -91,9 +91,9 @@ def leds():
     raw_data = raw_data[:addr] # truncate
     return raw_data
 
-def flocompile_test():
+def marcompile_test():
 
-    lc = fc.csv2bin("/tmp/flo_test1.csv")
+    lc = fc.csv2bin("/tmp/mar_test1.csv")
     lc.append(insta(IFINISH, 0))
     raw_data = np.array(lc, dtype=np.uint32)
     print(raw_data.size)
@@ -121,8 +121,8 @@ def example_tr_loop():
     tr_loops = 2
 
     # Initially, turn on LO
-    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in flocra
-    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in flocra
+    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in marga
+    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in marga
     assert dds0_phase_step < 2**31, "DDS frequency outside of valid range"
     assert dds1_phase_step < 2**31, "DDS frequency outside of valid range"
 
@@ -205,8 +205,8 @@ def tx_short():
     addr = 0
 
     # Turn on LO
-    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in flocra
-    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in flocra
+    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in marga
+    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in marga
     assert dds0_phase_step < 2**31, "DDS frequency outside of valid range"
     assert dds1_phase_step < 2**31, "DDS frequency outside of valid range"
 
@@ -248,8 +248,8 @@ def tx_short():
     # wait for 3us; shortened delay by 4 cycles for the next instructions to be right on time
     raw_data[addr] = insta(IWAIT, int(3 * fpga_clk_freq_MHz) - 4); addr += 1
 
-    dds2_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq2).astype(np.uint32) # 31b phase accumulator in flocra
-    dds3_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq3).astype(np.uint32) # 31b phase accumulator in flocra
+    dds2_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq2).astype(np.uint32) # 31b phase accumulator in marga
+    dds3_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq3).astype(np.uint32) # 31b phase accumulator in marga
 
     # switch frequency on both channels simultaneously, no reset
     raw_data[addr] = instb(DDS0_PHASE_LSB, 3, dds2_phase_step & 0xffff); addr += 1
@@ -277,7 +277,7 @@ def rx_short():
     cic_decimation = 4
     dds_demod_ch = 0
     acquisition_ticks = 800
-    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in flocra
+    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in marga
     assert dds0_phase_step < 2**31, "DDS frequency outside of valid range"
     raw_data[addr] = instb(DDS0_PHASE_LSB, 1, dds0_phase_step & 0xffff); addr += 1
     raw_data[addr] = instb(DDS0_PHASE_MSB, 0, dds0_phase_step >> 16); addr += 1
@@ -331,8 +331,8 @@ def loopback(cic0_decimation=7, cic1_decimation=10):
     addr = 0
 
     # Turn on LO
-    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in flocra
-    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in flocra
+    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in marga
+    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in marga
     assert dds0_phase_step < 2**31, "DDS frequency outside of valid range"
     assert dds1_phase_step < 2**31, "DDS frequency outside of valid range"
 
@@ -410,8 +410,8 @@ def loopback(cic0_decimation=7, cic1_decimation=10):
     # wait for 3us; shortened delay by 4 cycles for the next instructions to be right on time
     raw_data[addr] = insta(IWAIT, int(3 * fpga_clk_freq_MHz) - 4); addr += 1
 
-    dds2_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq2).astype(np.uint32) # 31b phase accumulator in flocra
-    dds3_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq3).astype(np.uint32) # 31b phase accumulator in flocra
+    dds2_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq2).astype(np.uint32) # 31b phase accumulator in marga
+    dds3_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq3).astype(np.uint32) # 31b phase accumulator in marga
 
     # switch frequency on both channels simultaneously, no reset
     raw_data[addr] = instb(DDS0_PHASE_LSB, 3, dds2_phase_step & 0xffff); addr += 1
@@ -470,8 +470,8 @@ def long_loopback():
     addr = 0
 
     # Turn on LO
-    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in flocra
-    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in flocra
+    dds0_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq0).astype(np.uint32) # 31b phase accumulator in marga
+    dds1_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq1).astype(np.uint32) # 31b phase accumulator in marga
     assert dds0_phase_step < 2**31, "DDS frequency outside of valid range"
     assert dds1_phase_step < 2**31, "DDS frequency outside of valid range"
 
@@ -529,8 +529,8 @@ def long_loopback():
     # wait for 3us; shortened delay by 4 cycles for the next instructions to be right on time
     raw_data[addr] = insta(IWAIT, int(3 * fpga_clk_freq_MHz) - 4); addr += 1
 
-    dds2_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq2).astype(np.uint32) # 31b phase accumulator in flocra
-    dds3_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq3).astype(np.uint32) # 31b phase accumulator in flocra
+    dds2_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq2).astype(np.uint32) # 31b phase accumulator in marga
+    dds3_phase_step = np.round(2**31 / fpga_clk_freq_MHz * lo_freq3).astype(np.uint32) # 31b phase accumulator in marga
 
     # switch frequency on both channels simultaneously, no reset
     raw_data[addr] = instb(DDS0_PHASE_LSB, 3, dds2_phase_step & 0xffff); addr += 1
@@ -581,7 +581,7 @@ if __name__ == "__main__":
 
     if False: # single shot, plot RX
         res = run_streaming_test(example_tr_loop())
-        # res = run_streaming_test(flocompile_test())
+        # res = run_streaming_test(marcompile_test())
 
         rxd = res[4]['run_seq']
         # offsets = 1e8

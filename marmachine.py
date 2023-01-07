@@ -1,22 +1,22 @@
 #/usr/bin/env python3
-# Machine code defines and functions for flocra.
+# Machine code defines and functions for marga.
 #
 # Functions should be fast, without any floating-point arithmetic -
 # that should be handled at a higher level.
 
-class FloUserWarning(UserWarning):
+class MarUserWarning(UserWarning):
     pass
 
-class FloCompileWarning(FloUserWarning):
+class MarCompileWarning(MarUserWarning):
     pass
 
-class FloRemovedInstructionWarning(FloCompileWarning):
+class MarRemovedInstructionWarning(MarCompileWarning):
     pass
 
-class FloGradWarning(FloUserWarning):
+class MarGradWarning(MarUserWarning):
     pass
 
-class FloServerWarning(FloUserWarning):
+class MarServerWarning(MarUserWarning):
     pass
 
 INOP = 0x0
@@ -43,7 +43,7 @@ DDS2_PHASE_LSB = 13
 DDS2_PHASE_MSB = 14
 GATES_LEDS = 15
 RX_CTRL = 16
-FLOCRA_BUFS = RX_CTRL + 1
+MARGA_BUFS = RX_CTRL + 1
 
 STATE_IDLE = 0
 STATE_PREPARE = 1

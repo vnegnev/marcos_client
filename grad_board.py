@@ -68,7 +68,7 @@ class OCRA1:
 
         self.bin_config = {
             'initial_bufs': np.array([
-                # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
+                # see marga.sv, gradient control lines (lines 186-190, 05.02.2021)
                 # strobe for both LSB and LSB, reset_n = 1, spi div as given, grad board select (1 = ocra1, 2 = gpa-fhdo)
                 (1 << 9) | (1 << 8) | (self.spi_div << 2) | 1,
                 0, 0,
@@ -85,7 +85,7 @@ class OCRA1:
             ], dtype=np.uint16)}
 
     def wait_for_ocra1_iface_idle(self):
-        """try multiple times until ocra1_iface core is idle -- read flocra
+        """try multiple times until ocra1_iface core is idle -- read marga
          register 5 and look at the ocra1 busy bit
         """
         for m in range(2): # waste a few cycles initially (mostly important for simulation)
@@ -112,7 +112,7 @@ class OCRA1:
 
         # configure main grad ctrl word first, in particular switch it to update the serialiser strobe only in response to LSB changes;
         # strobe the reset of the core just in case
-        # (flocra buffer address = 0, 8 MSBs of the 32-bit word)
+        # (marga buffer address = 0, 8 MSBs of the 32-bit word)
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (0 << 8) | (0 << 9)})
         self.server_command({'direct': 0x00000000 | (1 << 0) | (self.spi_div << 2) | (1 << 8) | (0 << 9)})
 
@@ -127,12 +127,12 @@ class OCRA1:
         self.server_command({'direct': 0x00000000})
 
     def write_dac(self, channel, value, gated_writes=True):
-        """gated_writes: if the caller knows that flocra will already be set
+        """gated_writes: if the caller knows that marga will already be set
         to send data to the serialiser only on LSB updates, this can
         be set to False. However if it's incorrectly set to False,
         there may be spurious writes to the serialiser in direct mode
         as the MSBs and LSBs are output by the buffers at different
-        times (for a timed flocra sequence, the buffers either update
+        times (for a timed marga sequence, the buffers either update
         simultaneously or only a single one updates at a time to save
         instructions).
         """
@@ -149,7 +149,7 @@ class OCRA1:
         return ["ocra1_" + l for l in ["vx", "vy", "vz", "vz2"] ]
 
     def key_convert(self, user_key):
-        # convert key from user-facing dictionary to flocompile format
+        # convert key from user-facing dictionary to marcompile format
         vstr = user_key.split('_')[1]
         ch_list = ['vx', 'vy', 'vz', 'vz2']
         return "ocra1_" + vstr, ch_list.index(vstr)
@@ -200,7 +200,7 @@ class GPAFHDO:
 
         self.bin_config = {
             'initial_bufs': np.array([
-                # see flocra.sv, gradient control lines (lines 186-190, 05.02.2021)
+                # see marga.sv, gradient control lines (lines 186-190, 05.02.2021)
                 # strobe for both MSB and LSB, reset_n = 1, spi div = 10, grad board select (1 = ocra1, 2 = gpa-fhdo)
                 (1 << 9) | (1 << 8) | (self.spi_div << 2) | 2,
                 0, 0,
@@ -217,7 +217,7 @@ class GPAFHDO:
             ], dtype=np.uint16)}
 
     def wait_for_gpa_fhdo_iface_idle(self):
-        """try multiple times until gpa_fhdo_iface core is idle -- read flocra
+        """try multiple times until gpa_fhdo_iface core is idle -- read marga
          register 5 and look at the fhdo busy bit
         """
         for m in range(2): # waste a few cycles initially (mostly important for simulation)
@@ -246,7 +246,7 @@ class GPAFHDO:
 
         # configure main grad ctrl word first, in particular switch it to update the serialiser strobe only in response to LSB changes;
         # gpa_fhdo_iface core has no reset, so no need to strobe it unlike for ocra1
-        # (flocra buffer address = 0, 8 MSBs of the 32-bit word)
+        # (marga buffer address = 0, 8 MSBs of the 32-bit word)
 
         self.server_command({'direct': 0x00000000 | (2 << 0) | (self.adc_spi_div << 2) | (0 << 8) | (0 << 9)})
 
@@ -268,13 +268,13 @@ class GPAFHDO:
         self.server_command({'direct': 0x00000000 | (2 << 0) | (spi_div << 2) | (0 << 8) | (upd << 9)})
 
     def write_dac(self, channel, value, gated_writes=True):
-        """gated_writes: if the caller knows that flocra will already be set
+        """gated_writes: if the caller knows that marga will already be set
         to send data to the serialiser only on LSB updates, this can
         be set to False to avoid unnecessary server commands. However
         if it's incorrectly set to False, there may be spurious writes
         to the serialiser, because in direct DAC write mode (which
         this function uses) the MSBs and LSBs are output by the
-        buffers at different times (for a timed flocra sequence, the
+        buffers at different times (for a timed marga sequence, the
         buffers either update simultaneously or only a single one
         updates at a time to save instructions) and a spurious update
         with only one 16b block changed could be sent. Leave it on
@@ -309,7 +309,7 @@ class GPAFHDO:
         # restore main grad ctrl word to respond to LSB or MSB changes
         if gated_writes:
             self.update_on_msb_writes(True, self.spi_div)
-        return rd[4]['regrd'] & 0xffff # lower 16 bits of flocra reg 5
+        return rd[4]['regrd'] & 0xffff # lower 16 bits of marga reg 5
 
     def expected_adc_code_from_dac_code_old(self, dac_code):
         """
@@ -478,7 +478,7 @@ class GPAFHDO:
         return ["fhdo_" + l for l in ["vx", "vy", "vz", "vz2"] ]
 
     def key_convert(self, user_key):
-        # convert key from user-facing dictionary to flocompile format
+        # convert key from user-facing dictionary to marcompile format
         vstr = user_key.split('_')[1]
         ch_list = ['vx', 'vy', 'vz', 'vz2']
         return "fhdo_" + vstr, ch_list.index(vstr)

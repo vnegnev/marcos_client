@@ -7,7 +7,7 @@
 import numpy as np
 import experiment as exp
 
-class Flocritek:
+class Marcritek:
     """Provides a simple API to interact with the Experiment class, with
     discrete commands that can be called in order."""
 
@@ -116,7 +116,7 @@ class Flocritek:
     def pulse(self, chan, amp, phase, duration, end_amp=0, end_phase=0, pulse_tx_gate=True, tx_gate_overhead=None):
         """Does a rectangular RF pulse
 
-        chan: 0 or 1, flocra TX channel to output the pulse on
+        chan: 0 or 1, marga TX channel to output the pulse on
 
         amp: output amplitude, proportional to voltage; 1 = full-scale
 
@@ -168,7 +168,7 @@ class Flocritek:
         """Acquire RX data for the duration specified, at the RX rate
         specified when the Experiment object was created.
 
-        chan: 0 or 1, flocra RX channel to sample
+        chan: 0 or 1, marga RX channel to sample
 
         duration: length of acquisition
 
@@ -195,10 +195,10 @@ class Flocritek:
 
         self._global_time += duration + rx_gate_overhead
 
-def test_flocritek():
+def test_marcritek():
     expt = exp.Experiment(lo_freq=5, # MHz
                           rx_t=1.5) # us sampling rate)
-    f = Flocritek(expt)
+    f = Marcritek(expt)
 
     # Turn all 4 gradients off
     for k in range(2):
@@ -254,4 +254,4 @@ def test_flocritek():
     expt._s.close() # close socket
 
 if __name__ == "__main__":
-    test_flocritek()
+    test_marcritek()
