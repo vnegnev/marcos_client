@@ -7,7 +7,7 @@
 import numpy as np
 import experiment as exp
 
-class Marcritek:
+class Marcostek:
     """Provides a simple API to interact with the Experiment class, with
     discrete commands that can be called in order."""
 
@@ -195,10 +195,10 @@ class Marcritek:
 
         self._global_time += duration + rx_gate_overhead
 
-def test_marcritek():
+def test_marcostek():
     expt = exp.Experiment(lo_freq=5, # MHz
                           rx_t=1.5) # us sampling rate)
-    f = Marcritek(expt)
+    f = Marcostek(expt)
 
     # Turn all 4 gradients off
     for k in range(2):
@@ -254,4 +254,4 @@ def test_marcritek():
     expt._s.close() # close socket
 
 if __name__ == "__main__":
-    test_marcritek()
+    test_marcostek()
