@@ -225,6 +225,9 @@ class Experiment:
             elif key in ['leds']:
                 keybin = key,
                 valbin = vals.astype(np.int32),
+            elif key in ['lo0_freq', 'lo1_freq', 'lo2_freq']:
+                keybin = key,
+                valbin = np.round(2**31 / fpga_clk_freq_MHz * vals).astype(np.uint32),
             else:
                 warnings.warn("Unknown marga experiment dictionary key: " + key)
                 continue

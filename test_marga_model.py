@@ -552,12 +552,6 @@ class ModelTest(unittest.TestCase):
         mc.max_removed_instructions = max_rem_instr
         self.assertEqual(refl, siml)
 
-    @unittest.skip("TODO")
-    def test_lo_change(self):
-        """ Test whether changes to the LO frequencies are correctly applied """
-        expt_args = {'auto_leds': False}
-        d = {'dds0_freq': (np.array([0, 1]), np.array([20, 10]))}
-
     def test_lo_change_expt(self):
         """ Test whether the Experiment class can handle changes in LO frequency, followed by being rerun """
         expt_args = {'auto_leds': False}
@@ -571,6 +565,23 @@ class ModelTest(unittest.TestCase):
         # with warnings.catch_warnings():
         #     warnings.filterwarnings("ignore", category=RuntimeWarning) # catch GPA-FHDO error due to re-initialisation
         refl, siml = compare_expt_dict(d, "test_lo_change_expt", self.s, self.p, run_fn=change_lo, **expt_args)
+        self.assertEqual(refl, siml)
+
+    def test_lo_modulate_expt(self):
+        """ Test whether time-synchronous modulation of LO frequencies are correctly applied """
+        expt_args = {'auto_leds': False, "allow_user_init_cfg": True}
+
+        def rfconv(f):
+            # convert value of f in machine units to floating-point,
+            # so that compilation converts back to machine units for
+            # easy simulation viewing/comparisons
+            return f * 122.88 / (2**31)
+
+        d = {'lo0_freq': (np.array([0, 0.5]), rfconv(np.array([20, 10]))),
+             'lo1_freq': (np.array([0, 0.8]), rfconv(np.array([30, 40]))),
+             'lo2_freq': (np.array([0, 1.3]), rfconv(np.array([50, 60]))),}
+
+        refl, siml = compare_expt_dict(d, "test_lo_modulate_expt", self.s, self.p, **expt_args)
         self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
