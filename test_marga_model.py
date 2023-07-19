@@ -143,6 +143,16 @@ class ModelTest(unittest.TestCase):
         refl, siml = compare_csv("test_rx_simple", self.s, self.p)
         self.assertEqual(refl, siml)
 
+    def test_lo_simple(self):
+        """ Simple single LO change """
+        refl, siml = compare_csv("test_lo_simple", self.s, self.p)
+        self.assertEqual(refl, siml)
+
+    def test_lo_many(self):
+        """ Multiple LO changes and phase resets """
+        refl, siml = compare_csv("test_lo_many", self.s, self.p)
+        self.assertEqual(refl, siml)
+
     def test_two_uneven_latencies(self):
         """Simultaneous state changes on two buffers, however 2nd buffer is
         specified to have 1 cycle of latency more than 1st - so its changes
@@ -541,6 +551,12 @@ class ModelTest(unittest.TestCase):
         # restore to default
         mc.max_removed_instructions = max_rem_instr
         self.assertEqual(refl, siml)
+
+    @unittest.skip("TODO")
+    def test_lo_change(self):
+        """ Test whether changes to the LO frequencies are correctly applied """
+        expt_args = {'auto_leds': False}
+        d = {'dds0_freq': (np.array([0, 1]), np.array([20, 10]))}
 
     def test_lo_change_expt(self):
         """ Test whether the Experiment class can handle changes in LO frequency, followed by being rerun """
