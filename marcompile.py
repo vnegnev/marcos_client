@@ -102,14 +102,15 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(MARGA_BUFS, dtype=np.
     like slow RF amps, very long cables etc
     """
 
-    # Input: CSV column, starting from 0 for tx0 i and ending with 21 for leds
+    # Input: CSV column, starting from 0 for tx0 i and ending with 27 for leds
     # Output: corresponding buffer index or indices to change
 
     data = np.loadtxt(path, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
     with open(path, 'r') as csvf:
         cols = csvf.readline().strip().split(',')[1:]
 
-    assert cols[-1] == ' csv_version_0.2', "Wrong CSV format"
+    if cols[-1] != ' csv_version_0.3':
+        warnings.warn("csv2bin: unexpected CSV format")
 
     if quick_start:
         # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from the simulator

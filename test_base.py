@@ -78,6 +78,28 @@ def restore_grad_board():
     exp.grad_board = gb_orig
     gb_changed = False
 
+def sanitise_arrays(rdata, sdata):
+    rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
+    sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
+
+    rdata_v03 = rdata.shape[1] == 31  # columns in v0.3 of CSV format
+    sdata_v03 = sdata.shape[1] == 31
+    if  rdata_v03 != sdata_v03:  # both must be same format
+        warnings.warn("Incompatible CSV formats. Attempting to compare only v0.2 subset.")
+        def v03tov02(mat, mat_old):
+            # convert matrix format from CSV v0.3 (DDS included) to CSV v0.2 (DDS not included)
+            if np.array_equal(mat[:2,0], mat_old[:2,0]) and np.array_equal(mat[3:,0], mat_old[2:,0]) and mat.shape[0] > 2 and mat[2,0] == 1:
+                mat = np.vstack([mat[:2,:], mat[3:,:]])  # remove row caused by DDS phase clear, but check that the rest of the diffs match precisely
+            return mat[:,:25]
+
+        if rdata_v03:
+            rdata = v03tov02(rdata, sdata)
+
+        elif sdata_v03:
+            sdata = v03tov02(sdata, rdata)
+
+    return rdata, sdata
+
 def compare_csv(fname, sock, proc,
                  initial_bufs=np.zeros(mc.MARGA_BUFS, dtype=np.uint16),
                  latencies=np.zeros(mc.MARGA_BUFS, dtype=np.uint32),
@@ -101,10 +123,7 @@ def compare_csv(fname, sock, proc,
     if self_ref:
         rdata = np.loadtxt(source_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(marga_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
-
-        rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
-        sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
-
+        rdata, sdata = sanitise_arrays(rdata, sdata)
         return rdata.tolist(), sdata.tolist()
     else:
         ref_csv = os.path.join("csvs", "ref_" + fname + ".csv")
@@ -142,10 +161,7 @@ def compare_dict(source_dict, ref_fname, sock, proc,
     if ignore_start_delay:
         rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(marga_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
-
-        rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
-        sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
-
+        rdata, sdata = sanitise_arrays(rdata, sdata)
         return rdata.tolist(), sdata.tolist()
     else:
         with open(ref_csv, "r") as ref:
@@ -173,7 +189,8 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
     classes in grad_board.py.
     """
 
-    e = exp.Experiment(prev_socket=sock, seq_dict=source_dict, **kwargs)
+    lo_freq = 1234567890 * 122.88 / 2**31
+    e = exp.Experiment(lo_freq=lo_freq, prev_socket=sock, seq_dict=source_dict, **kwargs)
 
     # run simulation
     rx_data, msgs = run_fn(e)
@@ -194,10 +211,7 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
     if ignore_start_delay:
         rdata = np.loadtxt(ref_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
         sdata = np.loadtxt(marga_sim_csv, skiprows=1, delimiter=',', comments='#').astype(np.uint32)
-
-        rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
-        sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
-
+        rdata, sdata = sanitise_arrays(rdata, sdata)
         return rdata.tolist(), sdata.tolist()
     else:
         with open(ref_csv, "r") as ref:

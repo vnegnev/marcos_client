@@ -219,6 +219,7 @@ class ModelTest(unittest.TestCase):
 
         restore_grad_board()
         # self.assertEqual( str(cm.exception) , "gpa-fhdo gradient error; possibly missing samples")
+        # self.assertEqual( str(cmu.warning), "csv2bin: unexpected CSV format")
         self.assertEqual( str(cmu.warning), "Gradient updates are too frequent for selected SPI divider. Missed samples are likely!")
         self.assertEqual( str(cmr.warning) , "SERVER ERROR: gpa-fhdo gradient error; possibly missing samples")
         self.assertEqual(refl, siml)
@@ -543,7 +544,7 @@ class ModelTest(unittest.TestCase):
 
     def test_lo_change_expt(self):
         """ Test whether the Experiment class can handle changes in LO frequency, followed by being rerun """
-        expt_args = {'lo_freq': 1, 'auto_leds': False}
+        expt_args = {'auto_leds': False}
         d = {'tx0': (np.array([0, 1]), np.array([0.5, 0])), 'rx0_en': (np.array([2, 3]), np.array([1, 0]))}
 
         def change_lo(e):
