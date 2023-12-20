@@ -22,7 +22,7 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
 * File description
 
-  csvs/ : CSV files used by test_flocra_model.py
+  csvs/ : CSV files used by test_marga_model.py
 
   experiment.py : basic API for controlling the MaRCoS server
 
@@ -32,9 +32,9 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
   server_comms.py : low-level communication library for the MaRCoS server; use if you wish to write your own API
 
-  test_flocra.py : hand-written (low-level) examples/tests of the Flocra system
+  test_marga.py : hand-written (low-level) examples/tests of the MaRCoS FPGA HDL (Marga)
 
-  test_flocra_model.py : unit tests of the MaRCoS server + Verilator model of the Flocra HDL
+  test_marga_model.py : unit tests of the MaRCoS server + Verilator model of the Marga HDL
 
   test_ocra_pulseq.py : tests of the [[https://github.com/lcbMGH/ocra-pulseq][ocra-pulseq]] interface [WIP]
 

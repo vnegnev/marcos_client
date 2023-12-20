@@ -110,7 +110,7 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(MARGA_BUFS, dtype=np.
         cols = csvf.readline().strip().split(',')[1:]
 
     if cols[-1] != ' csv_version_0.3':
-        warnings.warn("csv2bin: unexpected CSV format")
+        warnings.warn(f"csv2bin: '{cols[-1]}' unexpected CSV format")
 
     if quick_start:
         # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from the simulator
