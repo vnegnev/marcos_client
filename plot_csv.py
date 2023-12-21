@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-# Basic script to plot the CSV that marga_sim produces, so that you can visualise the expected pulse sequence from the hardware.
+# Plot the CSVs that marga_sim produces, so that you can visualise the expected pulse sequence from the hardware.
+#
+# Note: LO frequencies are not included in the plots.
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -22,7 +24,7 @@ if __name__ == "__main__":
     #                      names=True)
 
     data = np.loadtxt(sys.argv[1], skiprows=2, delimiter=',')
-    data[1:, 0] = data[1:, 0] - data[1, 0] + 1 # remove dead time in the beginning taken up by simulated memory writes
+    data[1:, 0] = data[1:, 0] - data[1, 0] + 1  # remove dead time in the beginning taken up by simulated memory writes
 
     time_us = data[:,0]/fpga_clk_freq_MHz
     tx = data[:,1:5].astype(np.int16) / 32768

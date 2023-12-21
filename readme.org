@@ -1,43 +1,75 @@
 #+TITLE: marcos_client
 
-(NEED TO UPDATE THIS FILE -- SOME OF THE DESCRIPTIONS ARE OBSOLETE)
-
-Python-based MaRCoS GUI and associated tests.
+Python-based MaRCoS client driver and various tests/examples.
 
 See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info; specifically the [[https://github.com/vnegnev/marcos_extras/wiki/using_marcos][Using MaRCoS]] and the [[https://github.com/vnegnev/marcos_extras/wiki/marcos_internals][MaRCoS internals]] pages.
 
 * Setup guide
 
-  - Install =msgpack= for Python manually or via the package manager of your choice.
+** Setting up the driver
 
-  - Clone the repo and copy =local_config.py.example= to =local_config.py=.
+- Install =msgpack= for Python manually or via the package manager of your choice.
 
-  - Edit =local_config.py= to suit your network and hardware setup.
+- Clone the repo and copy =local_config.py.example= to =local_config.py=.
 
-  - Run =test_server.py= and make sure no errors are returned.
+- Edit =local_config.py= to suit your network and hardware setup.
 
-  - Run =test_noise.py= to generate some simple pulses and view their properties on an oscilloscope.
+** Testing with simulator
 
-  - Import experiment.py in your higher-level MRI scripts.
+- Make sure you have the [[https://github.com/vnegnev/marcos_server][MaRCoS server]] and [[https://github.com/vnegnev/marga][MaRGA]] repos cloned in the same parent directory as marcos_client. For convenience, you may wish to clone the [[https://github.com/vnegnev/marcos_pack][marcos_pack]] repository, which has all the needed repos as Git submodules.
+
+- Ensure Verilator and Cmake are installed.
+
+- Run the following to initialise the MaRGA build environment and build the project.
+
+#+begin_src sh
+  cd marga
+  mkdir build
+  cd build
+  cmake ../src
+  make
+#+end_src
+
+- Return to =marcos_client= and run =python test_marga_model.py= . All tests should pass.
+
+** Testing with hardware
+
+- Run =test_server.py= and make sure no errors are returned. *Note 20/12/2023: not all tests currently run without a gradient board.*
+
+- Run =test_noise.py= to generate some simple pulses and view their properties on an oscilloscope.
+
+* Usage
+
+Import experiment.py in your higher-level MRI scripts, or see example code for more info.
 
 * File description
 
-  csvs/ : CSV files used by test_marga_model.py
+csvs/ : CSV files used by test_marga_model.py
 
-  experiment.py : basic API for controlling the MaRCoS server
+examples.py : examples of how to use experiment.py and other libraries [WIP]
 
-  examples.py : examples of how to use experiment.py and other libraries [WIP]
+experiment.py : API for controlling the MaRCoS server
 
-  local_config.py.example : template file for local configuration; create a copy and name it local_config.py to configure your local setup
+grad_board.py : driver code for gradient boards (OCRA1 and GPA-FHDO), including GPA-FHDO calibration routine
 
-  server_comms.py : low-level communication library for the MaRCoS server; use if you wish to write your own API
+local_config.py.example : template file for local configuration; create a copy and name it local_config.py to configure your local setup
 
-  test_marga.py : hand-written (low-level) examples/tests of the MaRCoS FPGA HDL (Marga)
+marcompile.py, marcostek.py, marmachine.py : Low-level MaRCoS compiler code, called by experiment.py
 
-  test_marga_model.py : unit tests of the MaRCoS server + Verilator model of the Marga HDL
+plot_csv.py : routine to plot a MaRCoS-format CSV for simple visualisation of sequences
 
-  test_ocra_pulseq.py : tests of the [[https://github.com/lcbMGH/ocra-pulseq][ocra-pulseq]] interface [WIP]
+server_comms.py : low-level communication library for the MaRCoS server; use if you wish to write your own API
 
-  test_server.py : unit tests of the standalone MaRCoS server operation
+test_base.py : base routines for MaRGA unit tests
 
-  vlsualiser.py : [WIP] plot expected ocra assembly file outputs (for very basic files)
+test_gpa_fhdo.py [obsolete] : test routine to run a sequence on the GPA-FHDO
+
+test_long_sequence.py : routine to test long sequences and aborting running sequences on hardware
+
+test_loopback.py [obsolete] : loopback test routine
+
+test_marga.py : hand-written (low-level) examples/tests of the MaRCoS FPGA HDL (MaRGA)
+
+test_marga_model.py : unit tests of the MaRCoS server + Verilator model of the MaRGA HDL
+
+test_server.py : unit tests of the standalone MaRCoS server operation
