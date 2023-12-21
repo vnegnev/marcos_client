@@ -2,7 +2,7 @@
 #
 # Base definitions and functions used for marga testing/simulation
 
-import sys, os, subprocess, warnings, socket, unittest, time
+import sys, os, subprocess, logging, warnings, socket, unittest, time, inspect
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -11,8 +11,15 @@ import server_comms as sc
 import marcompile as mc
 import experiment as exp
 
+# Logger: uncomment to save test logging information to file
+if False:
+    logging.basicConfig(filename='test_base.log', level=logging.DEBUG)
+
+# PDB shorthand
 import pdb
 st = pdb.set_trace
+
+
 ip_address = "localhost"
 port = 11111
 
@@ -20,7 +27,7 @@ port = 11111
 marga_sim_path = os.path.join("..", "marga")
 marga_sim_csv = os.path.join("/tmp", "marga_sim.csv")
 
-# Set to True to debug with GTKWave -- just do one test at a time!
+# Set to True to debug with GTKWave -- just make sure you only run one test at a time!
 marga_sim_fst_dump = False
 marga_sim_fst = os.path.join("/tmp", "marga_sim.fst")
 
@@ -82,10 +89,16 @@ def sanitise_arrays(rdata, sdata):
     rdata[1:,0] -= rdata[1,0] # subtract off initial offset time
     sdata[1:,0] -= sdata[1,0] # subtract off initial offset time
 
-    rdata_v03 = rdata.shape[1] == 31  # columns in v0.3 of CSV format
-    sdata_v03 = sdata.shape[1] == 31
-    if  rdata_v03 != sdata_v03:  # both must be same format
-        warnings.warn("Incompatible CSV formats. Attempting to compare only v0.2 subset.")
+    csv_v03_cols = 31  # columns in v0.3 of CSV format
+    csv_v02_cols = 25  # columns in v0.2 of CSV format
+    rdata_cols = rdata.shape[1]
+    sdata_cols = sdata.shape[1]
+    rdata_v03 = rdata_cols == csv_v03_cols
+    sdata_v03 = sdata_cols == csv_v03_cols
+
+    # both sets of CSV data must be converted to same format
+    if  rdata_v03 != sdata_v03 and ( (rdata_cols == csv_v02_cols) or (sdata_cols == csv_v02_cols) ):
+        logging.info(f"{inspect.getouterframes(inspect.currentframe(), 1)[2][3]}: Incompatible CSV formats. Attempting to compare only v0.2 subset.")
         def v03tov02(mat, mat_old):
             # convert matrix format from CSV v0.3 (DDS included) to CSV v0.2 (DDS not included)
             if np.array_equal(mat[:2,0], mat_old[:2,0]) and np.array_equal(mat[3:,0], mat_old[2:,0]) and mat.shape[0] > 2 and mat[2,0] == 1:
@@ -189,7 +202,7 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
     classes in grad_board.py.
     """
 
-    lo_freq = 1234567890 * 122.88 / 2**31
+    lo_freq = 1234567890 * 122.88 / 2**31  # Arbitrary default LO frequency for unit tests
     e = exp.Experiment(lo_freq=lo_freq, prev_socket=sock, seq_dict=source_dict, **kwargs)
 
     # run simulation

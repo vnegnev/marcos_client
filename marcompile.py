@@ -2,6 +2,7 @@
 # Basic CSV -> machine code compiler for marga
 
 import numpy as np
+import logging
 import warnings
 from marmachine import *
 try:
@@ -110,7 +111,10 @@ def csv2bin(path, quick_start=False, initial_bufs=np.zeros(MARGA_BUFS, dtype=np.
         cols = csvf.readline().strip().split(',')[1:]
 
     if cols[-1] != ' csv_version_0.3':
-        warnings.warn(f"csv2bin: '{cols[-1]}' unexpected CSV format")
+        if cols[-1] == ' csv_version_0.2':
+            logging.info(f"csv2bin for {path}: '{cols[-1]}' is older CSV format")
+        else:
+            warnings.warn(f"csv2bin: '{cols[-1]}' unknown CSV format")
 
     if quick_start:
         # remove dead time in the beginning taken up by simulated memory writes, if the input CSV is generated from the simulator
