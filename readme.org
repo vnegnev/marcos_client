@@ -34,7 +34,7 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
 
 ** Testing with hardware
 
-- Run =test_server.py= and make sure no errors are returned. *Note 20/12/2023: not all tests currently run without a gradient board.*
+- Run =test_server.py= and make sure no errors are returned. (Not all tests will pass without a gradient board; a simulated gradient board is not enough.)
 
 - Run =test_noise.py= to generate some simple pulses and view their properties on an oscilloscope.
 

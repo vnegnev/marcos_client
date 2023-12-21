@@ -4,6 +4,7 @@
 # python -m unittest test_server.ServerTest.test_bad_packet
 
 import socket, time, unittest
+from timeit import default_timer as timer
 import numpy as np
 import matplotlib.pyplot as plt
 import warnings
@@ -163,20 +164,39 @@ class ServerTest(unittest.TestCase):
             self.assertLess(read_t/loops, 100.0)
             self.assertLess(write_t/loops, 100.0)
 
-    @unittest.skip("marga devel")
+
     def test_net(self):
+        """Test network latencies between SDRLab and client.
+
+        SDRLab assembles a packet of length requested by client, and transfers
+        it over. Time to carry this out is measured and compared with expected
+        values.
+        """
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
         if real == "hardware":
-            loops = [10, 1000, 100000]
+            samples = [10, 1000, 100000]
             times = (1.5, 131.0, 158.5) # upper-bound times for network transfers
         elif real == "simulation":
-            loops = [10, 1000, 100000]
-            times = (1.5, 131.0, 158.5) # upper-bound times for network transfers
+            samples = [10, 1000, 100000]
+            times = (50, 400, 20000) # upper-bound times for network transfers
         elif real == "software":
-            loops = [10, 1000, 100000]
-            times = (1.5, 131.0, 158.5) # upper-bound times for network transfers
-        packet = construct_packet({'test_net':10}, self.packet_idx)
-        # VN: continue here
+            samples = [10, 1000, 100000]
+            times = (50, 400, 30000) # upper-bound times for network transfers
+
+        if real == "hardware":
+            warnings.warn("Non-simulation network test has not yet been benchmarked! Expect this to fail...")
+
+        for samples_to_send, expected_time in zip(samples, times):
+            packet = construct_packet({'test_net':samples_to_send}, self.packet_idx)
+            t_st = timer()
+            reply = send_packet(packet, self.s)
+            t_end = timer()
+            td_us = (t_end - t_st) * 1e6  # us
+            if td_us > expected_time:
+                warnings.warn("Time {:.1f}us longer than expected {:.1f}us".format(td_us, expected_time))
+
+            # If it's a simulation or software running on a very slow computer, this could potentially fail
+            self.assertLess(td_us, 100 * expected_time)
 
     def test_fpga_clk(self):
         packet = construct_packet({'fpga_clk': [0xdf0d, 0x03f03f30, 0x00100700]})
