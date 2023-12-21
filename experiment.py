@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 import grad_board as gb
 import server_comms as sc
-import marcompile as fc
+import marcompile as mc
 
 import pdb
 st = pdb.set_trace
@@ -54,7 +54,6 @@ class Experiment:
     exceptions by the class, halting the program
 
     init_gpa: initialise the GPA during the construction of this class
-
     """
 
     def __init__(self,
@@ -70,6 +69,7 @@ class Experiment:
                  init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
                  initial_wait=None, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least a few us. Is suitably set based on grad_max_update_rate by default.
                  auto_leds=True, # automatically scan the LED pattern from 0 to 255 as the sequence runs (set to off if you wish to manually control the LEDs)
+                 trig_wait_time=0, # nonzero values will add a trigger instruction to the start of the experiment sequence, with a timeout in units of clock cycles. Positive values must be below 2^24 (16,777,215) which is around 0.1s. Negative values will lead to an infinite wait (i.e. never timing out, blocking forever until a trigger arrives.)
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
                  fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
                  set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
@@ -114,6 +114,7 @@ class Experiment:
             self._initial_wait = 1 + 1/grad_max_update_rate
 
         self._auto_leds = auto_leds
+        self._trig_wait_time = trig_wait_time
 
         assert (seq_csv is None) or (seq_dict is None), "Cannot supply both a sequence dictionary and a CSV file."
         self._csv = None
@@ -280,8 +281,8 @@ class Experiment:
                        }
 
         # Set CIC decimation rate and internal shift, if necessary, and calculate CIC scale correction
-        rx0_words, self._rx0_cic_factor = fc.cic_words(self._rx_divs[0], self._set_cic_shift)
-        rx1_words, self._rx1_cic_factor = fc.cic_words(self._rx_divs[1], self._set_cic_shift)
+        rx0_words, self._rx0_cic_factor = mc.cic_words(self._rx_divs[0], self._set_cic_shift)
+        rx1_words, self._rx1_cic_factor = mc.cic_words(self._rx_divs[1], self._set_cic_shift)
         if not self._fix_cic_scale: # clear the correction factor
             self._rx0_cic_factor = 1
             self._rx1_cic_factor = 1
@@ -325,10 +326,10 @@ class Experiment:
         # do not clear relevant dictionary values if user-defined configuration of init parameters at runtime is allowed
         self.add_intdict(initial_cfg, append=self._allow_user_init_cfg)
 
-        self._machine_code = np.array( fc.dict2bin(self._seq,
-                                             self.gradb.bin_config['initial_bufs'],
-                                             self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
-                                             ), dtype=np.uint32 )
+        self._machine_code = np.array( mc.dict2bin(self._seq,
+                                                   self.gradb.bin_config['initial_bufs'],
+                                                   self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
+                                                   self._trig_wait_time), dtype=np.uint32 )
 
         self._seq_compiled = True
 
@@ -495,7 +496,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
 
         # Rate adjustment
         set_cic_shift = expt._set_cic_shift
-        rx_words, _ = fc.cic_words(rx_period, set_cic_shift)
+        rx_words, _ = mc.cic_words(rx_period, set_cic_shift)
         rx_wait = 100
         rxr_st = tstart + rx_wait
         wds = len(rx_words)
@@ -547,7 +548,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
             x = np.arange(M + initial_excess, M+l)
             y = np.array(rx1_mag[M + initial_excess : M+l])
 
-            _, cic_correction = fc.cic_words(k)
+            _, cic_correction = mc.cic_words(k)
             ysc = y * cic_correction
 
             # avoid off-by-1 errors - bit of a hack
@@ -574,7 +575,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
         # plt.xlabel('RX decimation')
         # plt.grid(True)
         plt.subplot(2,1,2)
-        _, cic_corrections = fc.cic_words(rx_periods)
+        _, cic_corrections = mc.cic_words(rx_periods)
         plt.plot(rx_periods, cic_corrections )
         plt.xlabel('RX decimation')
         plt.ylabel('RX CIC correction factor')
