@@ -33,11 +33,11 @@ class ModelTest(unittest.TestCase):
     def setUp(self):
         # start simulation
         if marga_sim_fst_dump:
-            self.p = subprocess.Popen([os.path.join(marga_sim_path, "build", "marga_sim"), "both", marga_sim_csv, marga_sim_fst],
+            self.p = subprocess.Popen([os.path.join(marga_sim_path, "build", "marga_sim"), "csv=" + marga_sim_csv, "fst=" + marga_sim_fst],
                                       stdout=subprocess.DEVNULL,
                                       stderr=subprocess.STDOUT)
         else:
-            self.p = subprocess.Popen([os.path.join(marga_sim_path, "build", "marga_sim"), "csv", marga_sim_csv],
+            self.p = subprocess.Popen([os.path.join(marga_sim_path, "build", "marga_sim"), "csv=" + marga_sim_csv],
                                       stdout=subprocess.DEVNULL,
                                       stderr=subprocess.STDOUT)
 
