@@ -72,8 +72,8 @@ class Experiment:
                  auto_leds=True, # automatically scan the LED pattern from 0 to 255 as the sequence runs (set to off if you wish to manually control the LEDs)
                  prev_socket=None, # previously-opened socket, if want to maintain status etc
                  fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
-                 set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
-                 allow_user_init_cfg=False, # allow user-defined alteration of marga configuration set by init, namely RX rate, LO properties etc; see the compile() method for details
+                 set_cic_shift=True, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
+                 allow_user_init_cfg=False, # allow user-defined alteration of flocra configuration set by init, namely RX rate, LO properties etc; see the compile() method for details
                  halt_and_reset=False, # upon connecting to the server, halt any existing sequences that may be running
                  flush_old_rx=False, # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always read them out and clear them before running a sequence. More advanced manual code can read RX from existing sequences.
                  ):
@@ -475,7 +475,7 @@ class Experiment:
 def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
 
     expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz,
-                      fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True)
+                      fix_cic_scale=False, set_cic_shift=True, allow_user_init_cfg=True, flush_old_rx=True)
     tr_t = 0
     tr_period = rx_time + rx_padding
     rx_lengths = []
@@ -520,7 +520,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
     for rt in rx_periods:
         expt.add_flodict( single_pulse_tr( tr_t , rt) )
         tr_t += tr_period
-        rx_lengths.append( int(rx_time * fpga_clk_freq_MHz / rt) + 1)
+        rx_lengths.append( int(rx_time * fpga_clk_freq_MHz / rt) )
 
     rxd, msgs = expt.run()
     expt.close_server(True)

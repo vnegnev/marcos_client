@@ -57,7 +57,7 @@ COUNTER_MAX = 0xffffff
 
 CIC_STAGES = 6 # N: number of CIC stages in the RX CICs
 # diff_delay = 1 # M: differential delay in comb section of CICs
-CIC_RATE_DATAWIDTH = 12 # 12-bit rate/data bus, 2-bit address
+CIC_RATE_DATAWIDTH = 14 # 12-bit rate/data bus, 2-bit address
 CIC_FASTEST_RATE, CIC_SLOWEST_RATE = 4, 4095 # CIC core settings
 
 def insta(instr, data):
