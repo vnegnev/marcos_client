@@ -2,7 +2,7 @@
 
 import msgpack, warnings
 
-from flomachine import FloServerWarning
+from marmachine import MarServerWarning
 
 version_major = 1
 version_minor = 0
@@ -83,7 +83,7 @@ def command(server_dict, socket, print_infos=False, assert_errors=False):
 
     if 'warnings' in return_status:
         for k in return_status['warnings']:
-            warnings.warn(k, FloServerWarning)
+            warnings.warn(k, MarServerWarning)
 
     if 'errors' in return_status:
         if assert_errors:

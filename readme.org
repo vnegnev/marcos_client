@@ -1,6 +1,6 @@
 #+TITLE: marcos_client
 
-(NEED TO UPDATE THIS FILE)
+(NEED TO UPDATE THIS FILE -- SOME OF THE DESCRIPTIONS ARE OBSOLETE)
 
 Python-based MaRCoS GUI and associated tests.
 
@@ -11,14 +11,12 @@ See the [[https://github.com/vnegnev/marcos_extras/wiki][MaRCoS wiki]] for info;
   - Install =msgpack= for Python manually or via the package manager of your choice.
 
   - Clone the repo and copy =local_config.py.example= to =local_config.py=.
-  
+
   - Edit =local_config.py= to suit your network and hardware setup.
 
   - Run =test_server.py= and make sure no errors are returned.
 
-  - Run =test_acquire.py= to test the hardware in a basic acquisition.
-
-  - Run =test_experiment.py= to test the experiment API.
+  - Run =test_noise.py= to generate some simple pulses and view their properties on an oscilloscope.
 
   - Import experiment.py in your higher-level MRI scripts.
 

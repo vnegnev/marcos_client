@@ -9,19 +9,20 @@ import matplotlib.pyplot as plt
 from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 import grad_board as gb
 import server_comms as sc
-import flocompile as fc
+import marcompile as fc
 
 import pdb
 st = pdb.set_trace
 
-######## TODO: configure the final buffers as well, whether in flocompile or elsewhere
+######## TODO: configure the final buffers as well, whether in marcompile or elsewhere
 
 class Experiment:
     """Wrapper class for managing an entire experimental sequence
 
     lo_freq: local oscillator frequencies, MHz: either single float,
     iterable of two or iterable of three values. Control three
-    independent LOs. At least a single float must be supplied
+    independent LOs. At least a single float must be supplied.
+    If supplying 2 or 3 values, must also specify the rx_lo.
 
     rx_t: RF RX sampling time/s in microseconds; single float or tuple
     of two.
@@ -31,8 +32,11 @@ class Experiment:
     default will use local oscillator 0 for both RX channels, unless
     otherwise specified.
 
+    Note: TX0 and TX1 will always be assigned to NCOs 0 and 1. NCO 2
+    is for free adjustment of the RX frequency relative to the TX.
+
     csv_file: path to a CSV execution file, which will be
-    compiled with flocompile.py . If this is not supplied, the
+    compiled with marcompile.py . If this is not supplied, the
     sequence bytecode should be supplied manually using
     define_sequence() before run() is called.
 
@@ -145,7 +149,7 @@ class Experiment:
         return self._rx_ts
 
     def set_lo_freq(self, lo_freq):
-        # lo_freq: either a single floating-point value, or an iterable of up to three values for each flocra NCO
+        # lo_freq: either a single floating-point value, or an iterable of up to three values for each marga NCO
 
         # extend lo_freq to 3 elements
         if not hasattr(lo_freq, "__len__"):
@@ -187,7 +191,7 @@ class Experiment:
             return tbins, txbins
 
         for key, (times, vals) in seq_dict.items():
-            # each possible dictionary entry returns a tuple (even if one element) for the binary dictionary to send to flocompile
+            # each possible dictionary entry returns a tuple (even if one element) for the binary dictionary to send to marcompile
             tbin = times_us(times + self._initial_wait),
             if key in ['tx0_i', 'tx0_q', 'tx1_i', 'tx1_q']:
                 valbin = tx_real(vals),
@@ -198,7 +202,7 @@ class Experiment:
             elif key in ['grad_vx', 'grad_vy', 'grad_vz', 'grad_vz2',
                          'fhdo_vx', 'fhdo_vy', 'fhdo_vz', 'fhdo_vz2',
                          'ocra1_vx', 'ocra1_vy', 'ocra1_vz', 'ocra1_vz2']:
-                # flocompile will figure out whether the key matches the selected grad board
+                # marcompile will figure out whether the key matches the selected grad board
                 keyb, channel = self.gradb.key_convert(key)
                 keybin = keyb, # tuple
                 valbin = self.gradb.float2bin(vals, channel),
@@ -222,7 +226,7 @@ class Experiment:
                 keybin = key,
                 valbin = vals.astype(np.int32),
             else:
-                warnings.warn("Unknown flocra experiment dictionary key: " + key)
+                warnings.warn("Unknown marga experiment dictionary key: " + key)
                 continue
 
             for t, k, v in zip(tbin, keybin, valbin):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Basic script to plot the CSV that flocra_sim produces, so that you can visualise the expected pulse sequence from the hardware.
+# Basic script to plot the CSV that marga_sim produces, so that you can visualise the expected pulse sequence from the hardware.
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,7 +10,7 @@ st = pdb.set_trace
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: python {:s} <csv_file.csv>".format(sys.argv[0]) )
-        print("\t Example: python {:s} /tmp/flocra_sim.csv".format(sys.argv[0]) )
+        print("\t Example: python {:s} /tmp/marga_sim.csv".format(sys.argv[0]) )
         exit()
 
     # data = np.genfromtxt(sys.argv[1],
