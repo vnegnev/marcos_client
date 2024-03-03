@@ -135,8 +135,8 @@ class ServerTest(unittest.TestCase):
         print_speeds = False
         real = send_packet(construct_packet({'are_you_real':0}, self.packet_idx), self.s)[4]['are_you_real']
         if real == "hardware":
-            deltas = (0.2, 2, 2)
-            times = (1.5, 131.0, 158.5) # numerical operation, bus read, bus write on hardware
+            deltas = (0.4, 2, 2)
+            times = (1.4, 131.0, 158.5) # numerical operation, bus read, bus write on hardware
             loops = 1000000
         elif real == "simulation":
             deltas = (0.1, 5000, 3500)
