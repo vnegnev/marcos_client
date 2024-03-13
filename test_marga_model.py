@@ -46,7 +46,7 @@ class ModelTest(unittest.TestCase):
         time.sleep(0.05) # give marga_sim time to start up
 
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.connect((ip_address, port)) # only connect to local simulator
+        self.s.connect(("localhost", 11111)) # only connect to local simulator
         self.packet_idx = 0
 
     def tearDown(self):
@@ -475,10 +475,8 @@ class ModelTest(unittest.TestCase):
              'rx1_en': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
              }
 
-        set_grad_board("gpa-fhdo")
-        expt_args = {'rx_t': 0.5, 'auto_leds': False}
+        expt_args = {"grad_board": "gpa-fhdo", 'rx_t': 0.5, 'auto_leds': False}
         refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_fhd", self.s, self.p, **expt_args)
-        restore_grad_board()
         self.assertEqual(refl, siml)
 
     def test_uneven_sparse_expt_oc1(self):
@@ -516,7 +514,7 @@ class ModelTest(unittest.TestCase):
     def test_init_grad_expt_fhd(self):
         """ Test whether GPA-FHDO gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait"""
         set_grad_board("gpa-fhdo")
-        expt_args = {'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
+        expt_args = {"grad_board": "gpa-fhdo", 'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
         d = {'grad_vx': (np.array([0, 5]), np.array([0.5, 0]))}
         refl, siml = compare_expt_dict(d, "test_init_grad_expt_fhd", self.s, self.p, **expt_args)
         restore_grad_board()

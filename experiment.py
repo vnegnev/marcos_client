@@ -6,7 +6,7 @@ import socket, time, warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
+import local_config as lc
 import grad_board as gb
 import server_comms as sc
 import marcompile as mc
@@ -16,8 +16,40 @@ st = pdb.set_trace
 
 ######## TODO: configure the final buffers as well, whether in marcompile or elsewhere
 
+class SDRLabConfig:
+    """ Configuration for an SDRLab device """
+    ip_address="localhost",
+    lo_freq=1, # MHz
+    rx_t=3.125, # us; multiples of 1/122.88, such as 3.125, are exact, others will be rounded to the nearest multiple of the 122.88 MHz clock
+    seq_dict=None,
+    seq_csv=None,
+    rx_lo=0, # which of internal NCO local oscillators (LOs), out of 0, 1, 2, to use for each channel
+    grad_max_update_rate=0.2, # MSPS, across all channels in parallel, best-effort
+    gpa_fhdo_offset_time=0, # when GPA-FHDO is used, offset the Y, Z and Z2 gradient times by 1x, 2x and 3x this value to emulate 'simultaneous' updates
+    print_infos=True, # show server info messages from this device
+    assert_errors=True, # halt on server errors from this device
+    init_gpa=False, # initialise the GPA-FHDO connected to this device (will reset its outputs as soon as the Experiment object is created)
+    initial_wait=None, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least a few us. Is suitably set based on grad_max_update_rate by default.
+    auto_leds=True, # automatically scan the LED pattern from 0 to 255 as the sequence runs (set to off if you wish to manually control the LEDs)
+    trig_wait_time=0, # nonzero values will add a trigger instruction to the start of the experiment sequence, with a timeout in units of clock cycles. Positive values must be below 2^24 (16,777,215) which is around 0.1s. Negative values will lead to an infinite wait (i.e. never timing out, blocking forever until a trigger arrives.) ## NOTE follower devices must use an infinite wait.
+    prev_socket=None, # previously-opened socket, if want to maintain status etc
+    fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
+    set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
+    allow_user_init_cfg=False, # allow user-defined alteration of marga configuration set by init, namely RX rate, LO properties etc; see the compile() method for details
+    halt_and_reset=False, # upon connecting to the server, halt any existing sequences that may be running
+    flush_old_rx=False, # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always read them out and clear them before running a sequence. More advanced manual code can read RX from existing sequences.
+
+
+
 class Experiment:
     """Wrapper class for managing an entire experimental sequence
+    ip_address: IP address of SDRLab
+
+    port: port of SDRLab
+
+    fpga_clk_freq_MHz: SDRLab's clock frequency
+
+    grad_board: gradient board of SDRLab; either "ocra1", "gpa-fhdo" or "none". ## TODO enable NONE functionality for grad_board
 
     lo_freq: local oscillator frequencies, MHz: either single float,
     iterable of two or iterable of three values. Control three
@@ -57,6 +89,10 @@ class Experiment:
     """
 
     def __init__(self,
+                 ip_address=lc.ip_address, # by default imported from local_config, but can be overriden if desired
+                 port=lc.port, # by default imported from local_config, but can be overriden if desired
+                 fpga_clk_freq_MHz=lc.fpga_clk_freq_MHz,
+                 grad_board=lc.grad_board,
                  lo_freq=1, # MHz
                  rx_t=3.125, # us; multiples of 1/122.88, such as 3.125, are exact, others will be rounded to the nearest multiple of the 122.88 MHz clock
                  seq_dict=None,
@@ -77,6 +113,10 @@ class Experiment:
                  halt_and_reset=False, # upon connecting to the server, halt any existing sequences that may be running
                  flush_old_rx=False, # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always read them out and clear them before running a sequence. More advanced manual code can read RX from existing sequences.
                  ):
+        self._ip_address = ip_address
+        self._port = port
+        self._fpga_clk_freq_MHz = fpga_clk_freq_MHz
+        self._grad_board = grad_board
 
         # create socket early so that destructor works
         self._close_socket = True
@@ -139,6 +179,7 @@ class Experiment:
         self._flush_old_rx = flush_old_rx
         self._allow_user_init_cfg = allow_user_init_cfg
 
+
     def __del__(self):
         if self._close_socket:
             self._s.close()
@@ -158,8 +199,8 @@ class Experiment:
         elif len(lo_freq) < 3:
             lo_freq = lo_freq[0], lo_freq[1], lo_freq[0] # extend from 2 to 3 elements
 
-        self._dds_phase_steps = np.round(2**31 / fpga_clk_freq_MHz * np.array(lo_freq)).astype(np.uint32)
-        self._lo_freqs = self._dds_phase_steps * fpga_clk_freq_MHz / (2 ** 31) # real LO freqs -- TODO: print for debugging
+        self._dds_phase_steps = np.round(2**31 / self._fpga_clk_freq_MHz * np.array(lo_freq)).astype(np.uint32)
+        self._lo_freqs = self._dds_phase_steps * self._fpga_clk_freq_MHz / (2 ** 31) # real LO freqs -- TODO: print for debugging
 
         self._seq_compiled = False # force recompilation
 
@@ -172,7 +213,7 @@ class Experiment:
         ## Various functions to handle the conversion
         def times_us(farr):
             """ farr: float array, times in us units; [0, inf) """
-            return np.round(fpga_clk_freq_MHz * farr).astype(np.int64) # negative values will get rejected at a later stage
+            return np.round(self._fpga_clk_freq_MHz * farr).astype(np.int64) # negative values will get rejected at a later stage
 
         def tx_real(farr):
             """ farr: float array, [-1, 1] """
@@ -228,7 +269,7 @@ class Experiment:
                 valbin = vals.astype(np.int32),
             elif key in ['lo0_freq', 'lo1_freq', 'lo2_freq']:
                 keybin = key,
-                valbin = np.round(2**31 / fpga_clk_freq_MHz * vals).astype(np.uint32),
+                valbin = np.round(2**31 / self._fpga_clk_freq_MHz * vals).astype(np.uint32),
             else:
                 warnings.warn("Unknown marga experiment dictionary key: " + key)
                 continue
@@ -326,6 +367,7 @@ class Experiment:
         # do not clear relevant dictionary values if user-defined configuration of init parameters at runtime is allowed
         self.add_intdict(initial_cfg, append=self._allow_user_init_cfg)
 
+        mc.grad_board = self._grad_board  # BAD, SETTING GLOBAL VARIABLE - TODO FIX
         self._machine_code = np.array( mc.dict2bin(self._seq,
                                                    self.gradb.bin_config['initial_bufs'],
                                                    self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
@@ -347,7 +389,7 @@ class Experiment:
 
         def convert_t(t_bin, y):
             # add a zero event in the beginning, and shift the times to the 'user frame'
-            t = np.concatenate( ([0], t_bin) ) /fpga_clk_freq_MHz - self._initial_wait
+            t = np.concatenate( ([0], t_bin) ) /self._fpga_clk_freq_MHz - self._initial_wait
             # add a zero value in the beginning of outputs
             y2 = np.concatenate( ([0], y) )
             return t, y2
@@ -478,7 +520,7 @@ class Experiment:
 
 def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
 
-    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz,
+    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / lc.fpga_clk_freq_MHz,
                       fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True)
     tr_t = 0
     tr_period = rx_time + rx_padding
@@ -504,8 +546,8 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
         ar1 = np.arange(wds + 1, dtype=int)
         ow = np.ones(wds + 1, dtype=int)
         ow[-1] = 0
-        rate_seq = ( tstart + (rx_wait + ar0) / fpga_clk_freq_MHz, np.array(rx_words) )
-        rate_en_seq = ( tstart + (rx_wait + ar1) / fpga_clk_freq_MHz, ow )
+        rate_seq = ( tstart + (rx_wait + ar0) / lc.fpga_clk_freq_MHz, np.array(rx_words) )
+        rate_en_seq = ( tstart + (rx_wait + ar1) / lc.fpga_clk_freq_MHz, ow )
 
         value_dict = {
             'tx0': tx_seq, 'tx1': tx_seq,
@@ -524,7 +566,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
     for rt in rx_periods:
         expt.add_flodict( single_pulse_tr( tr_t , rt) )
         tr_t += tr_period
-        rx_lengths.append( int(rx_time * fpga_clk_freq_MHz / rt) + 1)
+        rx_lengths.append( int(rx_time * lc.fpga_clk_freq_MHz / rt) + 1)
 
     rxd, msgs = expt.run()
     expt.close_server(True)

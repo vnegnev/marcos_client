@@ -20,9 +20,6 @@ import pdb
 st = pdb.set_trace
 
 
-ip_address = "localhost"
-port = 11111
-
 # simulation configuration
 marga_sim_path = os.path.join("..", "marga")
 marga_sim_csv = os.path.join("/tmp", "marga_sim.csv")
@@ -203,7 +200,8 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
     """
 
     lo_freq = 1234567890 * 122.88 / 2**31  # Arbitrary default LO frequency for unit tests
-    e = exp.Experiment(lo_freq=lo_freq, prev_socket=sock, seq_dict=source_dict, **kwargs)
+    e = exp.Experiment(ip_address="localhost", port=11111,
+                       lo_freq=lo_freq, prev_socket=sock, seq_dict=source_dict, **kwargs)
 
     # run simulation
     rx_data, msgs = run_fn(e)
