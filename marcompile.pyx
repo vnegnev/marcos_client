@@ -13,6 +13,7 @@ except ModuleNotFoundError:
 import pdb
 st = pdb.set_trace
 
+cdef tuple grad_data_bufs
 grad_data_bufs = (1, 2)
 
 max_removed_instructions = 1000
