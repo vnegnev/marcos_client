@@ -21,43 +21,6 @@ def construct_packet(data, packet_idx=0, command=request_pkt, version=(version_m
     fields = [command, packet_idx, 0, version, data]
     return fields
 
-# def process(payload, print_all=False):
-#     # data = msgpack.unpackb(raw_reply, use_list=False, max_array_len=1024*1024)
-#     reply_data = payload[4]
-
-#     if print_all:
-#         print("")
-
-#         status = payload[5]
-
-#         try:
-#             print("Errors:")
-#             for k in status['errors']:
-#                 print(k)
-#         except KeyError:
-#             pass
-
-#         try:
-#             print("Warnings:")
-#             for k in status['warnings']:
-#                 print(k)
-#         except KeyError:
-#             pass
-
-#         try:
-#             print("Infos:")
-#             for k in status['infos']:
-#                 print(k)
-#         except KeyError:
-#             pass
-
-#     try:
-#         print("Last elements of returned unsigned arrays: {:f}, {:f}".format(
-#             payload[4]['test_throughput']['array1'][-1], payload[4]['test_throughput']['array2'][-1]))
-#     except KeyError:
-#         print("Reply data: ")
-#         print(reply_data)
-
 def send_packet(packet, socket):
     socket.sendall(msgpack.packb(packet))
 
