@@ -21,10 +21,14 @@ def debug_print(*args, **kwargs):
     # print(*args, **kwargs)
     pass
 
-def col2buf(col_idx, value):
+def col2buf(int col_idx, value):
     """ Returns a tuple of (buffer indices), (values), (value masks)
     A value masks specifies which bits are actually relevant on the output.
     Can accept arrays of values."""
+    cdef tuple buf_idx
+    cdef tuple mask
+    cdef int grad_chan
+    # cdef int val_full
     if col_idx in (1, 2, 3, 4): # TX
         buf_idx = col_idx + 4, # TX0_I, TX0_Q, TX1_I, TX1_Q
         val = value,
