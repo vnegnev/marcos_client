@@ -6,7 +6,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pdb, sys
-import experiment as ex
+from device import Device
 from pulseq_assembler import PSAssembler
 st = pdb.set_trace
 
@@ -23,7 +23,7 @@ if __name__ == "__main__":
     if len(sys.argv) > 1 and "jitter" in sys.argv:
         do_jitter_test = True
         do_single_test = False
-    
+
     if False: # VN: this stuff belongs in a more sophisticated test, not test_loopback. TODO: refactor/remove
         gamma = 42570000 # Hz/T
 
@@ -38,8 +38,8 @@ if __name__ == "__main__":
         # max_dac_voltage = 5
         # gpa_current_per_volt = 3.75 # A/V, fill in value of gradient power amplifier here!
 
-        max_Hz_per_m = max_dac_voltage * gpa_current_per_volt * B_per_m_per_current * gamma	
-        # grad_max = max_Hz_per_m # factor used to normalize gradient amplitude, should be max value of the gpa used!	
+        max_Hz_per_m = max_dac_voltage * gpa_current_per_volt * B_per_m_per_current * gamma
+        # grad_max = max_Hz_per_m # factor used to normalize gradient amplitude, should be max value of the gpa used!
 
     # factor used to normalise RF amplitude, should be max value in system used!
     # (I.e. if unknown, lower values will create larger RF signals, since ocra-pulseq normalises its outputs to this value)
@@ -58,8 +58,8 @@ if __name__ == "__main__":
                      grad_pad=2,
                      addresses_per_grad_sample=3)
     tx_arr, grad_arr, cb, params = ps.assemble('../ocra-pulseq/test_files/test_loopback.seq', byte_format=False)
-    
-    exp = ex.Experiment(samples=params['readout_number'], # TODO: get information from PSAssembler
+
+    dev = Device(samples=params['readout_number'], # TODO: get information from PSAssembler
                         lo_freq=lo_freq,
                         tx_t=tx_t,
                         rx_t=params['rx_t'],
@@ -67,27 +67,27 @@ if __name__ == "__main__":
                         grad_t=grad_interval/num_grad_channels,
                         assert_errors=False,
                         print_infos=True)
-    
-    exp.define_instructions(cb)
+
+    dev.define_instructions(cb)
 
     if False: # test sine for grad/tx
         x = np.linspace(0,2*np.pi, 100)
         ramp_sine = np.sin(2*x)
-    
-    exp.add_tx(tx_arr)
-    exp.add_grad(grad_arr)
+
+    dev.add_tx(tx_arr)
+    dev.add_grad(grad_arr)
 
     if do_single_test:
-        exp.run()
-        
+        dev.run()
+
     if do_jitter_test:
         data = []
         trials = 1000
         for k in range(trials):
-            d, s = exp.run()
+            d, s = dev.run()
             # TODO: retake when warnings occur due to timeouts etc
             data.append( d ) # Comment out this line to avoid running on the hardware
-        
+
         taxis = np.arange(params['readout_number'])*params['rx_t']
         plt.figure(figsize=(10,9))
 
@@ -102,7 +102,7 @@ if __name__ == "__main__":
 
         lgd = len(good_data)
         lbd = len(bad_data)
-                
+
         plt.subplot(2,1,1)
         for d in good_data:
             plt.plot(taxis, d.real )
@@ -115,6 +115,6 @@ if __name__ == "__main__":
             plt.plot(taxis, d.real )
         plt.ylabel('loopback rx amplitude')
         plt.title('failing loopback data ({:d}/{:d}, {:.2f}%)'.format(lbd, lgd+lbd, 100*lbd/(lgd+lbd)))
-        plt.grid(True)        
-        
+        plt.grid(True)
+
         plt.show()

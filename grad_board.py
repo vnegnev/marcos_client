@@ -60,7 +60,7 @@ class OCRA1:
         if self.spi_div > 63:
             self.spi_div = 63 # max value, < 100 ksps
 
-        # bind function from Experiment class, or replace with something else for debugging
+        # bind function from Device class, or replace with something else for debugging
         self.server_command = server_command_f
 
         # Default calibration settings for all channels: linear transformation for now
@@ -176,7 +176,7 @@ class GPAFHDO:
 
         self.adc_spi_div = 30 # slow down when ADC transfers are being done
 
-        # bind function from Experiment class, or replace with something else for debugging
+        # bind function from Device class, or replace with something else for debugging
         self.server_command = server_command_f
 
         # TODO: will this ever need modification?

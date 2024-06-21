@@ -13,7 +13,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import experiment as ex
+from device import Device
 from local_config import grad_board
 
 import pdb
@@ -33,21 +33,21 @@ rf_length = 200 # us
 
 def long_loopback(rf_interval=1000000, trs=20):
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, halt_and_reset=True)
+    dev = Device(lo_freq=lo_freq, rx_t=rx_period, halt_and_reset=True)
 
     for k in range(trs):
         rf_t = rf_start_delay + k*rf_interval + np.array([0, rf_length])
         rx_t = rf_start_delay + k*rf_interval - rx_pad + np.array([0, rf_length + 2*rx_pad])
-        expt.add_flodict({
+        dev.add_flodict({
             'tx1': ( rf_t, np.array([rf_amp, 0]) ),
             'rx1_en': ( rx_t, np.array([1, 0]) )
             # 'leds': ( np.array([k*rf_interval]), np.array(k) )
             })
 
-    rxd, msgs = expt.run()
-    expt.close_server(only_if_sim=True)
+    rxd, msgs = dev.run()
+    dev.close_server(only_if_sim=True)
 
-    expt._s.close() # close socket on client
+    dev._s.close() # close socket on client
 
 if __name__ == "__main__":
     long_loopback(1000000, 255) #

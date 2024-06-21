@@ -2,11 +2,9 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import experiment as ex
+from device import Device
 from local_config import grad_board
 
-import pdb
-st = pdb.set_trace
 
 def trapezoid(plateau_a, total_t, ramp_t, ramp_pts, total_t_end_to_end=True, base_a=0):
     """Helper function that just generates a Numpy array starting at time
@@ -100,7 +98,7 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False, plot_sequence=False,
 
         return value_dict
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    dev = Device(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
     # gpa_fhdo_offset_time in microseconds; offset between channels to
     # avoid parallel updates (default update rate is 0.2 Msps, so
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
@@ -108,16 +106,16 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False, plot_sequence=False,
 
     tr_t = 0 # start the first TR at 20us
     for pamp in phase_amps:
-        expt.add_flodict( grad_echo_tr( tr_t, pamp) )
+        dev.add_flodict( grad_echo_tr( tr_t, pamp) )
         tr_t += tr_total_time
 
     if plot_sequence:
-        expt.plot_sequence()
+        dev.plot_sequence()
         plt.show()
 
-    rxd, msgs = expt.run()
-    expt.close_server(True)
-    expt._s.close() # close socket
+    rxd, msgs = dev.run()
+    dev.close_server(True)
+    dev._s.close() # close socket
 
     if plot_rx:
         plt.plot( rxd['rx0'].real )
@@ -244,7 +242,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
 
     tr_total_time = echo_duration * (echos_per_tr + 1) + tr_pause_duration
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    dev = Device(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
     # gpa_fhdo_offset_time in microseconds; offset between channels to
     # avoid parallel updates (default update rate is 0.2 Msps, so
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
@@ -265,7 +263,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
 
             global_t += echo_duration
 
-            expt.add_flodict({
+            dev.add_flodict({
                 'tx0': (tx_t, tx_a),
                 'tx1': (tx_t, tx_a),
                 'grad_vx': (readout_grad_t, readout_grad_a),
@@ -280,12 +278,12 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
         global_t += tr_pause_duration
 
     if plot_sequence:
-        expt.plot_sequence()
+        dev.plot_sequence()
         plt.show()
 
-    rxd, msgs = expt.run()
-    expt.close_server(True)
-    expt._s.close() # close socket
+    rxd, msgs = dev.run()
+    dev.close_server(True)
+    dev._s.close() # close socket
 
     if plot_rx:
         plt.plot( rxd['rx0'].real )
@@ -343,7 +341,7 @@ def radial(trs=36, plot_rx=False, init_gpa=False, plot_sequence=False):
 
         return value_dict
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    dev = Device(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
     # gpa_fhdo_offset_time in microseconds; offset between channels to
     # avoid parallel updates (default update rate is 0.2 Msps, so
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
@@ -351,16 +349,16 @@ def radial(trs=36, plot_rx=False, init_gpa=False, plot_sequence=False):
 
     tr_t = 0 # start the first TR at 0us
     for th in angles:
-        expt.add_flodict( radial_tr( tr_t, th ) )
+        dev.add_flodict( radial_tr( tr_t, th ) )
         tr_t += tr_total_time
 
     if plot_sequence:
-        expt.plot_sequence()
+        dev.plot_sequence()
         plt.show()
 
-    rxd, msgs = expt.run()
-    expt.close_server(True)
-    expt._s.close() # close socket
+    rxd, msgs = dev.run()
+    dev.close_server(True)
+    dev._s.close() # close socket
 
     if plot_rx:
         plt.plot( rxd['rx0'].real )

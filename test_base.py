@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import server_comms as sc
 
 import marcompile as mc
-import experiment as exp
+import device as dev
 
 # Logger: uncomment to save test logging information to file
 if False:
@@ -73,13 +73,13 @@ def set_grad_board(gb):
     if not gb_changed:
         gb_orig = mc.grad_board
     mc.grad_board = gb
-    exp.grad_board = gb
+    dev.grad_board = gb
     gb_changed = True
 
 def restore_grad_board():
     global gb_orig, gb_changed
     mc.grad_board = gb_orig
-    exp.grad_board = gb_orig
+    dev.grad_board = gb_orig
     gb_changed = False
 
 def sanitise_arrays(rdata, sdata):
@@ -180,31 +180,34 @@ def compare_dict(source_dict, ref_fname, sock, proc,
             siml = sim.read().splitlines()
         return refl, siml
 
-def expt_run(e):
-    """ Function for customising how compare_expt_dict() runs Experiments; e.g. for testing different Experiment methods etc
-    (see test_lo_change_expt in test_marga_model.py for an example)"""
-    rx_data, msgs = e.run()
+def dev_run(d):
+    """Function for customising how compare_dev_dict() runs Device tests;
+    e.g. for testing different Device methods etc (see test_lo_change_dev in
+    test_marga_model.py for an example)
+
+    """
+    rx_data, msgs = d.run()
     return rx_data, msgs
 
-def compare_expt_dict(source_dict, ref_fname, sock, proc,
+def compare_dev_dict(source_dict, ref_fname, sock, proc,
                       # initial_bufs=np.zeros(mc.MARGA_BUFS, dtype=np.uint16),
                       # latencies=np.zeros(mc.MARGA_BUFS, dtype=np.uint32),
                       ignore_start_delay=True,
-                      run_fn=expt_run,
+                      run_fn=dev_run,
                       **kwargs):
     """Arguments the same as for compare_dict(), except that the source
     dictionary is in floating-point units, and the kwargs are passed
-    to the Experiment class constructor. Note that the initial_bufs
-    and latencies are supplied to the Experiment class from the
+    to the Device class constructor. Note that the initial_bufs
+    and latencies are supplied to the Device class from the
     classes in grad_board.py.
     """
 
     lo_freq = 1234567890 * 122.88 / 2**31  # Arbitrary default LO frequency for unit tests
-    e = exp.Experiment(ip_address="localhost", port=11111,
+    d = dev.Device(ip_address="localhost", port=11111,
                        lo_freq=lo_freq, prev_socket=sock, seq_dict=source_dict, **kwargs)
 
     # run simulation
-    rx_data, msgs = run_fn(e)
+    rx_data, msgs = run_fn(d)
 
     # halt simulation
     sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), sock)

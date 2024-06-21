@@ -2,7 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
-import experiment as ex
+from device import Device
 from local_config import grad_board
 
 import pdb
@@ -23,7 +23,7 @@ def test_jitter(
         loops=10,
         print_loops=False,
         plot_sequence=False,
-        experiment_kwargs={}):
+        device_kwargs={}):
     """Two successive pulses, with an adjustable interval between them.
 
     Trigger an oscilloscope from the TX gate or first pulse, and look
@@ -54,30 +54,30 @@ def test_jitter(
                   'grad_vz2': grad_data,
                   'tx_gate': (tx_gate_start_time + np.array([0, tx_gate_length]), np.array([1, 0]))}
 
-    exp = ex.Experiment(lo_freq=rf_pulse_freq, gpa_fhdo_offset_time=gpa_fhdo_offset_time, **experiment_kwargs)
-    exp.add_flodict(event_dict)
+    dev = Device(lo_freq=rf_pulse_freq, gpa_fhdo_offset_time=gpa_fhdo_offset_time, **device_kwargs)
+    dev.add_flodict(event_dict)
 
     if plot_sequence:
-        exp.plot_sequence()
+        dev.plot_sequence()
         plt.show()
 
     for k in range(loops):
-        exp.run()
+        dev.run()
         if print_loops and k % 1000 == 0:
             print(f"Loop {k}")
 
-    exp.close_server(only_if_sim=True)
+    dev.close_server(only_if_sim=True)
 
 if __name__ == "__main__":
     # slowed down to suit VN's setup, due to GPA-FHDO communication chip being dead
-    experiment_kwargs = {'init_gpa': True, 'grad_max_update_rate': 0.1}
+    device_kwargs = {'init_gpa': True, 'grad_max_update_rate': 0.1}
     loops = int(1e6)
 
     # Enable the test that you want to run below
 
     # RF pulses close together, gradient pulses further apart, rf and grad start simultaneously (default)
     if False:
-        test_jitter(loops=loops, experiment_kwargs=experiment_kwargs) # many loops
+        test_jitter(loops=loops, device_kwargs=device_kwargs) # many loops
 
     # RF and gradient pulses start almost simultaneously (RF offset to avoid SPI noise), second pulses happen at an adjustable interval
     if True:
@@ -86,4 +86,4 @@ if __name__ == "__main__":
         test_jitter(loops=loops, rf_pulse_start_time=10.5,
                     rf_interval=interval, rf_amp=amp,
                     grad_interval=interval, grad_amp=amp,
-                    experiment_kwargs=experiment_kwargs) # many loops
+                    device_kwargs=device_kwargs) # many loops

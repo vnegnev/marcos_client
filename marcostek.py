@@ -5,23 +5,23 @@
 #
 
 import numpy as np
-import experiment as exp
+from device import Device
 
 class Marcostek:
-    """Provides a simple API to interact with the Experiment class, with
+    """Provides a simple API to interact with the Device class, with
     discrete commands that can be called in order."""
 
-    def __init__(self, exp, grad_update_interval=5,
+    def __init__(self, dev, grad_update_interval=5,
                  tx_gate_overhead=0,
                  invert_tx_gate=False,
                  rx_gate_overhead=0,
                  invert_rx_gate=False):
-        """exp: previously-created Experiment object
+        """dev: previously-created Device object
 
         grad_update_interval: raster time of gradients in us.
 
         Must be equal to or greater than 1 / grad_max_update_rate used
-        to create the exp object (by default 0.2 MSPS, so
+        to create the dev object (by default 0.2 MSPS, so
         grad_update_interval must be > 5 for OCRA1 and > 1.25 for
         GPA-FHDO)
 
@@ -33,7 +33,7 @@ class Marcostek:
 
         invert_rx_gate: invert RX gate TTL polarity (if true, logic 0 during RX)
         """
-        self._exp = exp
+        self._dev = dev
         self._grad_update_interval = grad_update_interval
 
         assert tx_gate_overhead >= 0, "TX gate overhead time cannot be negative"
@@ -68,7 +68,7 @@ class Marcostek:
 
         Takes grad_update_interval us to complete.
         """
-        self._exp.add_flodict({'grad_v' + self._chan_str(chan):
+        self._dev.add_flodict({'grad_v' + self._chan_str(chan):
                                ( np.array([self._global_time]), np.array([0]) )})
 
         self._global_time += self._grad_update_interval
@@ -81,7 +81,7 @@ class Marcostek:
         Takes grad_update_interval us to complete.
         """
         assert -1 <= value and value <= 1, "Grad value out of range"
-        self._exp.add_flodict({'grad_v' + self._chan_str(chan):
+        self._dev.add_flodict({'grad_v' + self._chan_str(chan):
                                ( np.array([self._global_time]), np.array([value]) )})
 
         self._global_time += self._grad_update_interval
@@ -108,7 +108,7 @@ class Marcostek:
         assert n_steps > 0, "Number of steps cannot be negative"
         assert step_duration >= self._grad_update_interval, \
             "Step duration cannot be shorter than gradient update interval"
-        self._exp.add_flodict({'grad_v' + self._chan_str(chan):
+        self._dev.add_flodict({'grad_v' + self._chan_str(chan):
                                ( self._global_time + np.linspace(step_duration, n_steps * step_duration, n_steps),
                                  np.linspace(start_val, end_val, n_steps) )})
         self._global_time += n_steps * step_duration
@@ -155,18 +155,18 @@ class Marcostek:
         cplx_scale = np.cos(phase_rad) + 1j * np.sin(phase_rad)
         end_cplx_scale = np.cos(end_phase_rad) + 1j * np.sin(end_phase_rad)
 
-        self._exp.add_flodict({'tx'+str(chan): ( self._global_time + tx_gate_overhead + np.array([0, duration]),
+        self._dev.add_flodict({'tx'+str(chan): ( self._global_time + tx_gate_overhead + np.array([0, duration]),
                                                  np.array([amp * cplx_scale, end_amp * end_cplx_scale]) )})
 
         if pulse_tx_gate:
-            self._exp.add_flodict({'tx_gate': ( self._global_time + np.array([0, duration + tx_gate_overhead]),
+            self._dev.add_flodict({'tx_gate': ( self._global_time + np.array([0, duration + tx_gate_overhead]),
                                                 np.array([not self._invert_tx_gate, self._invert_tx_gate]) )})
 
         self._global_time += duration + tx_gate_overhead
 
     def rx(self, chan, duration, pulse_rx_gate=True, rx_gate_overhead=None):
         """Acquire RX data for the duration specified, at the RX rate
-        specified when the Experiment object was created.
+        specified when the Device object was created.
 
         chan: 0 or 1, marga RX channel to sample
 
@@ -185,20 +185,20 @@ class Marcostek:
         assert duration > 0, "RX duration cannot be negative"
         assert rx_gate_overhead >= 0, "RX gate overhead time cannot be negative"
 
-        self._exp.add_flodict({
+        self._dev.add_flodict({
             'rx'+str(chan)+'_en': (self._global_time + rx_gate_overhead + np.array([0, duration]),
                                    np.array([1, 0]) )})
 
         if pulse_rx_gate:
-            self._exp.add_flodict({'rx_gate': (self._global_time + np.array([0, duration + rx_gate_overhead]),
+            self._dev.add_flodict({'rx_gate': (self._global_time + np.array([0, duration + rx_gate_overhead]),
                                                np.array([not self._invert_rx_gate, self._invert_rx_gate]) ) })
 
         self._global_time += duration + rx_gate_overhead
 
 def test_marcostek():
-    expt = exp.Experiment(lo_freq=5, # MHz
+    dev = Device(lo_freq=5, # MHz
                           rx_t=1.5) # us sampling rate)
-    f = Marcostek(expt)
+    f = Marcostek(dev)
 
     # Turn all 4 gradients off
     for k in range(2):
@@ -242,16 +242,16 @@ def test_marcostek():
     f.delay(15)
     f.pulse(1, 0.6, 235, third_time)
 
-    # Acquire data on channel 0 for 100us (at 1.5us sampling rate, specified in the construction of expt)
+    # Acquire data on channel 0 for 100us (at 1.5us sampling rate, specified in the construction of Device)
     f.rx(0, 100)
 
     # Turn off gradients
     for k in range(4):
         f.gradoff(k)
 
-    rxd, msgs = expt.run()
-    expt.close_server(True)
-    expt._s.close() # close socket
+    rxd, msgs = dev.run()
+    dev.close_server(True)
+    dev._s.close() # close socket
 
 if __name__ == "__main__":
     test_marcostek()

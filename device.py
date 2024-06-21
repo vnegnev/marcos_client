@@ -31,7 +31,7 @@ class SDRLabConfig:
     init_gpa=False, # initialise the GPA-FHDO connected to this device (will reset its outputs as soon as the Experiment object is created)
     initial_wait=None, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least a few us. Is suitably set based on grad_max_update_rate by default.
     auto_leds=True, # automatically scan the LED pattern from 0 to 255 as the sequence runs (set to off if you wish to manually control the LEDs)
-    trig_wait_time=0, # nonzero values will add a trigger instruction to the start of the experiment sequence, with a timeout in units of clock cycles. Positive values must be below 2^24 (16,777,215) which is around 0.1s. Negative values will lead to an infinite wait (i.e. never timing out, blocking forever until a trigger arrives.) ## NOTE follower devices must use an infinite wait.
+    trig_wait_time=0, # nonzero values will add a trigger instruction to the start of the experiment sequence, with a timeout in units of clock cycles. Positive values must be below 2^24 (16,777,215) which is around 0.1s. Negative values will lead to an infinite wait (i.e. never timing out, blocking forever until a trigger arrives.) ## NOTE slave devices must use an infinite wait.
     prev_socket=None, # previously-opened socket, if want to maintain status etc
     fix_cic_scale=True, # scale the RX data precisely based on the rate being used; otherwise a 2x variation possible in data amplitude based on rate
     set_cic_shift=False, # program the CIC internal bit shift to maintain the gain within a factor of 2 independent of rate; required if the open-source CIC is used in the design
@@ -41,8 +41,8 @@ class SDRLabConfig:
 
 
 
-class Experiment:
-    """Wrapper class for managing an entire experimental sequence
+class Device:
+    """Wrapper class for managing a hardware interface to an SDRLab
     ip_address: IP address of SDRLab
 
     port: port of SDRLab
@@ -102,7 +102,7 @@ class Experiment:
                  gpa_fhdo_offset_time=0, # when GPA-FHDO is used, offset the Y, Z and Z2 gradient times by 1x, 2x and 3x this value to emulate 'simultaneous' updates
                  print_infos=True, # show server info messages
                  assert_errors=True, # halt on server errors
-                 init_gpa=False, # initialise the GPA (will reset its outputs when the Experiment object is created)
+                 init_gpa=False, # initialise the GPA (will reset its outputs when the Device object is created)
                  initial_wait=None, # initial pause before experiment begins - required to configure the LOs and RX rate; must be at least a few us. Is suitably set based on grad_max_update_rate by default.
                  auto_leds=True, # automatically scan the LED pattern from 0 to 255 as the sequence runs (set to off if you wish to manually control the LEDs)
                  trig_wait_time=0, # nonzero values will add a trigger instruction to the start of the experiment sequence, with a timeout in units of clock cycles. Positive values must be below 2^24 (16,777,215) which is around 0.1s. Negative values will lead to an infinite wait (i.e. never timing out, blocking forever until a trigger arrives.)
@@ -293,7 +293,7 @@ class Experiment:
 
     def add_flodict(self, flodict, append=True):
         """ Add a floating-point dictionary to the sequence """
-        assert self._csv is None, "Cannot replace the dictionary for an Experiment class created from a CSV"
+        assert self._csv is None, "Cannot replace the dictionary for an Device class created from a CSV"
         self.add_intdict(self.flo2int(flodict), append)
         self._seq_compiled = False
 
@@ -377,7 +377,7 @@ class Experiment:
 
     def get_flodict(self, intd=None):
         """Calculate floating-point dictionaries based on the data inside the
-        Experiment class so far -- useful for plotting or testing the sequence"""
+        Device class so far -- useful for plotting or testing the sequence"""
 
         if intd is None:
             if not self._seq_compiled:
@@ -520,7 +520,7 @@ class Experiment:
 
 def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
 
-    expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / lc.fpga_clk_freq_MHz,
+    dev = Device(lo_freq=lo_freq, rx_t=rx_periods[0] / lc.fpga_clk_freq_MHz,
                       fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True)
     tr_t = 0
     tr_period = rx_time + rx_padding
@@ -537,7 +537,7 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
         rx_seq = ( tstart + 5 + np.array([0, rx_time]), np.array([1, 0]) )
 
         # Rate adjustment
-        set_cic_shift = expt._set_cic_shift
+        set_cic_shift = dev._set_cic_shift
         rx_words, _ = mc.cic_words(rx_period, set_cic_shift)
         rx_wait = 100
         rxr_st = tstart + rx_wait
@@ -564,12 +564,12 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
         return value_dict
 
     for rt in rx_periods:
-        expt.add_flodict( single_pulse_tr( tr_t , rt) )
+        dev.add_flodict( single_pulse_tr( tr_t , rt) )
         tr_t += tr_period
         rx_lengths.append( int(rx_time * lc.fpga_clk_freq_MHz / rt) + 1)
 
-    rxd, msgs = expt.run()
-    expt.close_server(True)
+    rxd, msgs = dev.run()
+    dev.close_server(True)
 
     # rx_lengths_a = np.array(rx_lengths)
     # print("RX lengths from calculation: ", rx_lengths)
@@ -625,27 +625,27 @@ def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_perio
         plt.show()
 
 def test_gpa_calibration():
-    expt = Experiment(init_gpa=True)
+    dev = Device(init_gpa=True)
 
     # test calibration on GPA-FHDO capable of driving a full current load
     # if false, just test over a narrow range
     full_current = True
 
     if full_current:
-        expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=5)
-        expt.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=1, test_cal=True)
+        dev.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=5)
+        dev.gradb.calibrate(channels=[0], max_current=0.7, num_calibration_points=30, averages=1, test_cal=True)
     else:
-        expt.gradb.calibrate(channels=[0], max_current=0.05, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=2)
-        expt.gradb.calibrate(channels=[0], max_current=0.05, num_calibration_points=30, averages=1, test_cal=True)
+        dev.gradb.calibrate(channels=[0], max_current=0.05, num_calibration_points=30, averages=5, settle_time=0.005, poly_degree=2)
+        dev.gradb.calibrate(channels=[0], max_current=0.05, num_calibration_points=30, averages=1, test_cal=True)
 
 def test_lo_change():
-    expt = Experiment(auto_leds=False)
-    expt.add_flodict({'tx0': ( np.array([1]), np.array([0.5]) )})
-    expt.compile()
-    expt.set_lo_freq(2)
-    expt.compile()
-    expt.run()
-    # expt.close_server(only_if_sim=True)
+    dev = Device(auto_leds=False)
+    dev.add_flodict({'tx0': ( np.array([1]), np.array([0.5]) )})
+    dev.compile()
+    dev.set_lo_freq(2)
+    dev.compile()
+    dev.run()
+    # dev.close_server(only_if_sim=True)
 
 if __name__ == "__main__":
     print("No tests are run.")

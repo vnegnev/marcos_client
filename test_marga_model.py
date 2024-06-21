@@ -428,36 +428,36 @@ class ModelTest(unittest.TestCase):
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_single_expt(self):
-        """ Basic state change on a single buffer. Experiment version"""
+    def test_single_dev(self):
+        """ Basic state change on a single buffer. Device version"""
         set_grad_board("gpa-fhdo")
         d = {'tx0_i': (np.array([1]), np.array([0.5]))}
-        expt_args = {'rx_t': 2, 'auto_leds': False}
-        refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
+        dev_args = {'rx_t': 2, 'auto_leds': False}
+        refl, siml = compare_dev_dict(d, "test_single_dev", self.s, self.p, **dev_args)
         self.assertEqual(refl, siml)
 
         # test for the other grad board
         self.tearDown(); self.setUp()
         set_grad_board("ocra1")
-        refl, siml = compare_expt_dict(d, "test_single_expt", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_single_dev", self.s, self.p, **dev_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_four_par_expt_iq(self):
-        """ State change on four buffers in parallel. Experiment version using complex inputs"""
+    def test_four_par_dev_iq(self):
+        """ State change on four buffers in parallel. Device version using complex inputs"""
         d = {'tx0': (np.array([1]), np.array([0.5+0.2j])), 'tx1': (np.array([1]), np.array([-0.3+1j]))}
-        expt_args = {'rx_t': 2, 'auto_leds': False}
+        dev_args = {'rx_t': 2, 'auto_leds': False}
         set_grad_board("gpa-fhdo")
-        refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_four_par_dev_iq", self.s, self.p, **dev_args)
         self.assertEqual(refl, siml)
 
         self.tearDown(); self.setUp()
         set_grad_board("ocra1")
-        refl, siml = compare_expt_dict(d, "test_four_par_expt_iq", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_four_par_dev_iq", self.s, self.p, **dev_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_uneven_sparse_expt_fhd(self):
+    def test_uneven_sparse_dev_fhd(self):
         """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
         d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
              'tx1': (np.array([5,20,  50,70,  110,125]), np.array([-1j,0,  -0.5j,0,  0.5+0.3j,0])),
@@ -475,11 +475,11 @@ class ModelTest(unittest.TestCase):
              'rx1_en': (np.array([8,14,  33,45,  83,95]), np.array([1,0, 1,0, 1,0])),
              }
 
-        expt_args = {"grad_board": "gpa-fhdo", 'rx_t': 0.5, 'auto_leds': False}
-        refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_fhd", self.s, self.p, **expt_args)
+        dev_args = {"grad_board": "gpa-fhdo", 'rx_t': 0.5, 'auto_leds': False}
+        refl, siml = compare_dev_dict(d, "test_uneven_sparse_dev_fhd", self.s, self.p, **dev_args)
         self.assertEqual(refl, siml)
 
-    def test_uneven_sparse_expt_oc1(self):
+    def test_uneven_sparse_dev_oc1(self):
         """ Miscellaneous pulses on TX and gradients, with various acquisition windows """
         d = {'tx0': (np.array([10,15, 30,35, 100,105]), np.array([1,0, 0.8j,0, 0.7+0.2j,0])),
              'tx1': (np.array([5,20,  50,70,  110,125]), np.array([-1j,0,  -0.5j,0,  0.5+0.3j,0])),
@@ -497,77 +497,77 @@ class ModelTest(unittest.TestCase):
              }
 
         set_grad_board("ocra1")
-        expt_args = {'rx_t': 0.5, 'auto_leds': False}
-        refl, siml = compare_expt_dict(d, "test_uneven_sparse_expt_oc1", self.s, self.p, **expt_args)
+        dev_args = {'rx_t': 0.5, 'auto_leds': False}
+        refl, siml = compare_dev_dict(d, "test_uneven_sparse_dev_oc1", self.s, self.p, **dev_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_cic_shift_expt(self):
+    def test_cic_shift_dev(self):
         """ Test the experiment code to program the open-source (non-Xilinx) variant of the CIC filter """
         # d = {'tx0': ( np.array([10, 15]), np.array([0.5, 0]) )}
         set_grad_board("ocra1")
-        expt_args = {'rx_t': 0.5, 'set_cic_shift': True, 'auto_leds': False}
-        refl, siml = compare_expt_dict({}, "test_cic_shift_expt", self.s, self.p, **expt_args)
+        dev_args = {'rx_t': 0.5, 'set_cic_shift': True, 'auto_leds': False}
+        refl, siml = compare_dev_dict({}, "test_cic_shift_dev", self.s, self.p, **dev_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_init_grad_expt_fhd(self):
+    def test_init_grad_dev_fhd(self):
         """ Test whether GPA-FHDO gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait"""
         set_grad_board("gpa-fhdo")
-        expt_args = {"grad_board": "gpa-fhdo", 'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
+        dev_args = {"grad_board": "gpa-fhdo", 'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
         d = {'grad_vx': (np.array([0, 5]), np.array([0.5, 0]))}
-        refl, siml = compare_expt_dict(d, "test_init_grad_expt_fhd", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_init_grad_dev_fhd", self.s, self.p, **dev_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_init_grad_expt_oc1(self):
+    def test_init_grad_dev_oc1(self):
         """ Test whether OCRA1 gradient events happening at time = 0 cause errors -- they should not if there's a sufficient initial wait."""
         set_grad_board("ocra1")
-        expt_args = {'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
+        dev_args = {'rx_t': 0.5, 'grad_max_update_rate': 0.1, 'auto_leds': False} # deliberately slow update rate
         d = {'grad_vx': (np.array([0, 20]), np.array([0.5, 0])) }
-        refl, siml = compare_expt_dict(d, "test_init_grad_expt_oc1", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_init_grad_dev_oc1", self.s, self.p, **dev_args)
         restore_grad_board()
         self.assertEqual(refl, siml)
 
-    def test_auto_leds_expt(self):
+    def test_auto_leds_dev(self):
         """ Test whether the auto-LED scan works correctly """
-        expt_args = {'auto_leds': True}
+        dev_args = {'auto_leds': True}
         d = {'tx0_i': (np.array([0, 100]), np.array([1, 0])) }
-        refl, siml = compare_expt_dict(d, "test_auto_leds_expt", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_auto_leds_dev", self.s, self.p, **dev_args)
         self.assertEqual(refl, siml)
 
-    def test_tx_complex_expt(self):
-        """ Test whether the Experiment class removes duplicate i/q entries for complex TX data """
+    def test_tx_complex_dev(self):
+        """ Test whether the Device class removes duplicate i/q entries for complex TX data """
         max_rem_instr = mc.max_removed_instructions
         mc.max_removed_instructions = 1
-        expt_args = {'auto_leds': False}
+        dev_args = {'auto_leds': False}
         d = {'tx0': (np.array([0, 10, 15, 20, 30, 50]), np.array([1-1j, 1+1j, 1j, -1+1j, -1, -1-1j]))}
         with warnings.catch_warnings():
             warnings.filterwarnings("error", category=mc.MarRemovedInstructionWarning)
-            refl, siml = compare_expt_dict(d, "test_tx_complex_expt", self.s, self.p, **expt_args)
+            refl, siml = compare_dev_dict(d, "test_tx_complex_dev", self.s, self.p, **dev_args)
 
         # restore to default
         mc.max_removed_instructions = max_rem_instr
         self.assertEqual(refl, siml)
 
-    def test_lo_change_expt(self):
-        """ Test whether the Experiment class can handle changes in LO frequency, followed by being rerun """
-        expt_args = {'auto_leds': False}
-        d = {'tx0': (np.array([0, 1]), np.array([0.5, 0])), 'rx0_en': (np.array([2, 3]), np.array([1, 0]))}
+    def test_lo_change_dev(self):
+        """ Test whether the Device class can handle changes in LO frequency, followed by being rerun """
+        dev_args = {'auto_leds': False}
+        dout = {'tx0': (np.array([0, 1]), np.array([0.5, 0])), 'rx0_en': (np.array([2, 3]), np.array([1, 0]))}
 
-        def change_lo(e):
-            e.run() # compile internally
-            e.set_lo_freq(2)
-            return e.run() # compile internally
+        def change_lo(d):
+            d.run() # compile internally
+            d.set_lo_freq(2)
+            return d.run() # compile internally
 
         # with warnings.catch_warnings():
         #     warnings.filterwarnings("ignore", category=RuntimeWarning) # catch GPA-FHDO error due to re-initialisation
-        refl, siml = compare_expt_dict(d, "test_lo_change_expt", self.s, self.p, run_fn=change_lo, **expt_args)
+        refl, siml = compare_dev_dict(dout, "test_lo_change_dev", self.s, self.p, run_fn=change_lo, **dev_args)
         self.assertEqual(refl, siml)
 
-    def test_lo_modulate_expt(self):
+    def test_lo_modulate_dev(self):
         """ Test whether time-synchronous modulation of LO frequencies are correctly applied """
-        expt_args = {'auto_leds': False, "allow_user_init_cfg": True}
+        dev_args = {'auto_leds': False, "allow_user_init_cfg": True}
 
         def rfconv(f):
             # convert value of f in machine units to floating-point,
@@ -579,7 +579,7 @@ class ModelTest(unittest.TestCase):
              'lo1_freq': (np.array([0, 0.8]), rfconv(np.array([30, 40]))),
              'lo2_freq': (np.array([0, 1.3]), rfconv(np.array([50, 60]))),}
 
-        refl, siml = compare_expt_dict(d, "test_lo_modulate_expt", self.s, self.p, **expt_args)
+        refl, siml = compare_dev_dict(d, "test_lo_modulate_dev", self.s, self.p, **dev_args)
         self.assertEqual(refl, siml)
 
 if __name__ == "__main__":
