@@ -4,6 +4,8 @@
 # Functions should be fast, without any floating-point arithmetic -
 # that should be handled at a higher level.
 
+import numpy as np
+
 class MarUserWarning(UserWarning):
     pass
 
@@ -60,15 +62,15 @@ CIC_STAGES = 6 # N: number of CIC stages in the RX CICs
 CIC_RATE_DATAWIDTH = 12 # 12-bit rate/data bus, 2-bit address
 CIC_FASTEST_RATE, CIC_SLOWEST_RATE = 4, 4095 # CIC core settings
 
-def insta(instr, data):
+def insta(instr: np.uint8, data: np.uint32):
     """ Instruction A: FSM control """
     assert instr in [INOP, IFINISH, IWAIT, ITRIG, ITRIGFOREVER], "Unknown instruction"
     assert (data & COUNTER_MAX) == (data & 0xffffffff), "Data out of range"
     return (instr << 24) | (data & 0xffffff)
 
-def instb(tgt, delay, data):
+def instb(tgt: np.uint8, delay: np.uint8, data: np.uint16):
     """ Instruction B: timed buffered data """
     assert tgt <= 24, "Unknown target buffer"
     assert 0 <= delay <= 255, "Delay out of range"
-    assert (data & 0xffff) == (data & 0xffffffff), "Data out of range"
-    return (IDATA << 24) | ( (tgt & 0x7f) << 24 ) | ( (delay & 0xff) << 16 ) | (data & 0xffff)
+    assert (np.uint32(data) & 0xffff) == (np.uint32(data) & 0xffffffff), "Data out of range"
+    return (IDATA << 24) | ( (tgt & 0x7f) << 24 ) | (delay << 16) | np.uint32(data)
