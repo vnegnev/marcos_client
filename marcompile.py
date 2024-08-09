@@ -10,9 +10,6 @@ try:
 except ModuleNotFoundError:
     grad_board = "gpa-fhdo"
 
-import pdb
-st = pdb.set_trace
-
 grad_data_bufs = (1, 2)
 
 max_removed_instructions = 1000
@@ -23,7 +20,7 @@ def debug_print(*args, **kwargs):
 
 def col2buf(col_idx, value):
     """ Returns a tuple of (buffer indices), (values), (value masks)
-    A value masks specifies which bits are actually relevant on the output.
+    Value masks specify which bits are actually relevant on the output.
     Can accept arrays of values."""
     if col_idx in (1, 2, 3, 4): # TX
         buf_idx = col_idx + 4, # TX0_I, TX0_Q, TX1_I, TX1_Q
@@ -92,7 +89,7 @@ def col2buf(col_idx, value):
         val = value << bit_idx,
         mask = 0x0003 << bit_idx,
 
-    return buf_idx, val, mask
+    return np.uint16(buf_idx), np.uint16(val), np.uint16(mask)
 
 def csv2bin(path,
             quick_start=False,
@@ -265,7 +262,7 @@ def cl2bin(changelist,
                 if msb:
                     if num_chgs[1]: # MSB buffer and not the first grad event on this timestep
                         # turn broadcast off if this isn't the first grad event on this timestep
-                        data = data & ~0x0100
+                        data = data & ~np.uint16(0x0100)
                         # return LSB back to old values, since this one is now done in the past
                         grad_vals[:] = grad_vals_old # revert the last known buffer values
                 # else:
@@ -351,8 +348,8 @@ def cl2bin(changelist,
     for ch, ch_prev in zip( reversed(changes[1:]), reversed(changes[:-1]) ):
         # does the current timestep need to output more data than can
         # fit into the time gap since the previous timestep?
-        timestep = ch[0] - ch_prev[0]
-        timediff = ch[1].size - timestep
+        timestep = np.int32(ch[0] - ch_prev[0])
+        timediff = np.int32(ch[1].size - timestep)
         # if timestep < ch[1].size: # not enough time
 
         if timediff > 0:
@@ -427,7 +424,7 @@ def cl2bin(changelist,
         for m, (ind, dat) in enumerate(zip(event[1], event[2])):
             execution_delay = b_instrs - m - 1 #+ time - 2
             btli = buf_time_left[ind]
-            buf_empty = btli <= m # or <= m, need to check
+            buf_empty = btli <= m
             if buf_empty: # buffer empty for this instruction; need an appropriate delay only for sync
                 # (check against m since with successive cycles, remaining buffers will empty out)
                 extra_delay = execution_delay + this_time_offset
