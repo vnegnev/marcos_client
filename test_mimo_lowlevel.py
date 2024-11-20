@@ -149,7 +149,8 @@ def test_mimo_lowlevel(master_ip="localhost", master_port=11111,
                        lo_freq = 20,
                        # RX sampling time, us
                        rx_t = 0.0326,
-                       plot_preview=False, plot_data=False):
+                       plot_preview=False, plot_data=False,
+                       **kwargs):
     """Manual 2-board master-slave synchronisation test. Main steps are:
     - start master manually
     - start slave (immediate trigger wait)
@@ -176,9 +177,9 @@ def test_mimo_lowlevel(master_ip="localhost", master_port=11111,
         "assert_errors": True,
         "halt_and_reset": False,
         "fix_cic_scale": True,
-        "set_cic_shift": False,  # needs to be true for open-source cores
+        "set_cic_shift": True,  # needs to be true for open-source cores
         "flush_old_rx": False,
-    }
+    } | kwargs
 
     master_kwargs = {
         'mimo_master': True, 'trig_output_time': trig_output_time, 'slave_trig_latency': slave_trig_latency

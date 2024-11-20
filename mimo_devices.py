@@ -143,7 +143,9 @@ def test_mimo_devices(single=True):
     # How to do global arguments (shared for every device)
     rx_t = 1
 
-    mdev = MimoDevices(ips=ips, ports=ports, extra_args=extra_args, rx_t=rx_t)
+    mdev = MimoDevices(ips=ips, ports=ports, extra_args=extra_args, rx_t=rx_t,
+                       set_cic_shift=True, # must be true for open-source cores
+                       )
     devs = mdev.dev_list()
 
     for dev in devs:
