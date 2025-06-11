@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "marcos_client"
+version = "0.1.0"
+description = "Client (GUI and command-line interfaces) for MaRCoS"
+readme = { file = "readme.org", content-type = "text/plain" }
+authors = [{ name = "Vlad Negnevitsky" }]
+license = { text = "GPL-3.0-or-later" }
+requires-python = ">=3.7"
+dependencies = ["numpy", "matplotlib", "msgpack"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]  # Because the repo is "flat", i.e. the source code is not in a "marcos_client" subfolder
