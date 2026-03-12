@@ -491,8 +491,10 @@ class GPAFHDO:
             grad_vals_cal = self.apply_cal(grad_vals, channel)
         else:
             grad_vals_cal = grad_vals
-        gr_dacbits = np.round(32767.51 * (grad_vals_cal + 1)).astype(np.uint32)
-        gr = gr_dacbits | 0x80000 | (channel << 16)
+        #gr_dacbits = np.round(32767.51 * (grad_vals_cal + 1)).astype(np.uint32)
+        # gr = gr_dacbits | 0x80000 | (channel << 16)
+        gr_dacbits = np.round(32767.51 * (grad_vals_cal + 1)).astype(np.uint16)
+        gr = gr_dacbits.astype(np.uint32) | np.uint32(0x80000) | np.uint32(channel << 16)
 
         # # always broadcast for the final channel (TODO: probably not needed for GPA-FHDO, check then remove)
         # broadcast = channel == self.grad_channels - 1
