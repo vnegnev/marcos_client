@@ -42,18 +42,19 @@ import numpy as np
 from numpy.polynomial import Polynomial
 import time, warnings
 import matplotlib.pyplot as plt
-import local_config as lc
+from hardware_config import HardwareConfig
 
 import pdb
 st = pdb.set_trace
 
-grad_clk_t = 1/lc.fpga_clk_freq_MHz # ~8.14ns period for RP-122
-
 class OCRA1:
     def __init__(self,
                  server_command_f,
-                 max_update_rate=0.1):
+                 max_update_rate=0.1,
+                 hardware_config=None):
         """ max_update_rate is in MSPS for updates on a single channel; used to choose the SPI clock divider """
+        self.hardware_config = HardwareConfig() if hardware_config is None else hardware_config
+        grad_clk_t = 1 / self.hardware_config.fpga_clk_freq_MHz
 
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
         self.spi_div = int(np.floor(1 / (spi_cycles_per_tx * max_update_rate * grad_clk_t))) - 1
@@ -165,8 +166,11 @@ class OCRA1:
 class GPAFHDO:
     def __init__(self,
                  server_command_f,
-                 max_update_rate=0.1):
+                 max_update_rate=0.1,
+                 hardware_config=None):
         """ max_update_rate is in MSPS for updates on a single channel; used to choose the SPI clock divider """
+        self.hardware_config = HardwareConfig() if hardware_config is None else hardware_config
+        grad_clk_t = 1 / self.hardware_config.fpga_clk_freq_MHz
         fhdo_max_update_rate = max_update_rate * 4 # single-channel serial, so needs to be faster
 
         spi_cycles_per_tx = 30 # actually 24, but including some overhead
@@ -182,11 +186,7 @@ class GPAFHDO:
         # TODO: will this ever need modification?
         self.grad_channels = 4
 
-        # try to get from local_config.py
-        try:
-            self.gpa_current_per_volt = lc.gpa_fhdo_current_per_volt
-        except AttributeError:
-            self.gpa_current_per_volt = 2.5 # if it doesn't match your grad board, add to your local_config.py
+        self.gpa_current_per_volt = self.hardware_config.gpa_fhdo_current_per_volt
 
         # initialize gpa fhdo calibration with ideal values
         # self.dac_values = np.array([0x7000, 0x8000, 0x9000])

@@ -3,7 +3,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import experiment as ex
-from local_config import grad_board
 
 import pdb
 st = pdb.set_trace
@@ -49,7 +48,8 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False, plot_sequence=False,
               phase_duration=200, # length of phase plateau
               tr_wait=100, # delay after end of RX before start of next TR
 
-              rx_period=10/3 # us, 3.333us, 300 kHz rate
+              rx_period=10/3, # us, 3.333us, 300 kHz rate
+              hardware_config=None,
               ):
     ## All times are in the context of a single TR, starting at time 0
 
@@ -100,7 +100,13 @@ def grad_echo(trs=21, plot_rx=False, init_gpa=False, plot_sequence=False,
 
         return value_dict
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    expt = ex.Experiment(
+        lo_freq=lo_freq,
+        rx_t=rx_period,
+        init_gpa=init_gpa,
+        gpa_fhdo_offset_time=(1 / 0.2 / 3.1),
+        hardware_config=hardware_config,
+    )
     # gpa_fhdo_offset_time in microseconds; offset between channels to
     # avoid parallel updates (default update rate is 0.2 Msps, so
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
@@ -156,7 +162,8 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
                     slice_start_amp=0.3, # 1 = gradient full-scale, starting amplitude (by default ramps from +ve to -ve in each TR)
 
                     tr_pause_duration=3000, # us, length of time to pause from the end of final echo's RX pulse to start of next TR
-                    trs=5 # number of TRs
+                    trs=5, # number of TRs
+                    hardware_config=None,
                     ):
     """
     readout gradient: x
@@ -244,7 +251,13 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
 
     tr_total_time = echo_duration * (echos_per_tr + 1) + tr_pause_duration
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    expt = ex.Experiment(
+        lo_freq=lo_freq,
+        rx_t=rx_period,
+        init_gpa=init_gpa,
+        gpa_fhdo_offset_time=(1 / 0.2 / 3.1),
+        hardware_config=hardware_config,
+    )
     # gpa_fhdo_offset_time in microseconds; offset between channels to
     # avoid parallel updates (default update rate is 0.2 Msps, so
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra
@@ -294,7 +307,7 @@ def turbo_spin_echo(plot_rx=False, init_gpa=False, plot_sequence=False,
         plt.plot( rxd['rx1'].imag )
         plt.show()
 
-def radial(trs=36, plot_rx=False, init_gpa=False, plot_sequence=False):
+def radial(trs=36, plot_rx=False, init_gpa=False, plot_sequence=False, hardware_config=None):
     ## All times are relative to a single TR, starting at time 0
     lo_freq = 0.2 # MHz
     rf_amp = 0.5 # 1 = full-scale
@@ -343,7 +356,13 @@ def radial(trs=36, plot_rx=False, init_gpa=False, plot_sequence=False):
 
         return value_dict
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, init_gpa=init_gpa, gpa_fhdo_offset_time=(1 / 0.2 / 3.1))
+    expt = ex.Experiment(
+        lo_freq=lo_freq,
+        rx_t=rx_period,
+        init_gpa=init_gpa,
+        gpa_fhdo_offset_time=(1 / 0.2 / 3.1),
+        hardware_config=hardware_config,
+    )
     # gpa_fhdo_offset_time in microseconds; offset between channels to
     # avoid parallel updates (default update rate is 0.2 Msps, so
     # 1/0.2 = 5us, 5 / 3.1 gives the offset between channels; extra

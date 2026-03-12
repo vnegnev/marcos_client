@@ -6,10 +6,10 @@ import socket, time, warnings
 import numpy as np
 import matplotlib.pyplot as plt
 
-from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
 import grad_board as gb
 import server_comms as sc
 import marcompile as fc
+from hardware_config import HardwareConfig
 
 import pdb
 st = pdb.set_trace
@@ -76,13 +76,16 @@ class Experiment:
                  allow_user_init_cfg=False, # allow user-defined alteration of marga configuration set by init, namely RX rate, LO properties etc; see the compile() method for details
                  halt_and_reset=False, # upon connecting to the server, halt any existing sequences that may be running
                  flush_old_rx=False, # when debugging or developing new code, you may accidentally fill up the RX FIFOs - they will not automatically be cleared in case there is important data inside. Setting this true will always read them out and clear them before running a sequence. More advanced manual code can read RX from existing sequences.
+                 hardware_config=None,
                  ):
+        self.hardware_config = HardwareConfig() if hardware_config is None else hardware_config
+        fpga_clk_freq_MHz = self.hardware_config.fpga_clk_freq_MHz
 
         # create socket early so that destructor works
         self._close_socket = True
         if prev_socket is None:
             self._s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self._s.connect( (ip_address, port) )
+            self._s.connect((self.hardware_config.ip_address, self.hardware_config.port))
         else:
             self._s = prev_socket
             self._close_socket = False # do not close previous socket
@@ -100,6 +103,7 @@ class Experiment:
             rx_lo = rx_lo, rx_lo # extend to 2 elements
         self._rx_lo = rx_lo
 
+        grad_board = self.hardware_config.grad_board
         assert grad_board in ('ocra1', 'gpa-fhdo'), "Unknown gradient board!"
         if grad_board == 'ocra1':
             gradb_class = gb.OCRA1
@@ -107,11 +111,17 @@ class Experiment:
         else:
             gradb_class = gb.GPAFHDO
             self._gpa_fhdo_offset_time = gpa_fhdo_offset_time
-        self.gradb = gradb_class(self.server_command, grad_max_update_rate)
+        self.gradb = gradb_class(
+            self.server_command,
+            grad_max_update_rate,
+            hardware_config=self.hardware_config,
+        )
 
         if initial_wait is None:
             # auto-set the initial wait to be long enough for initial gradient configuration to finish, plus 1us for miscellaneous startup
             self._initial_wait = 1 + 1/grad_max_update_rate
+        else:
+            self._initial_wait = initial_wait
 
         self._auto_leds = auto_leds
 
@@ -150,6 +160,7 @@ class Experiment:
 
     def set_lo_freq(self, lo_freq):
         # lo_freq: either a single floating-point value, or an iterable of up to three values for each marga NCO
+        fpga_clk_freq_MHz = self.hardware_config.fpga_clk_freq_MHz
 
         # extend lo_freq to 3 elements
         if not hasattr(lo_freq, "__len__"):
@@ -165,6 +176,7 @@ class Experiment:
     def flo2int(self, seq_dict):
         """Convert a floating-point sequence dictionary to an integer binary
         dictionary"""
+        fpga_clk_freq_MHz = self.hardware_config.fpga_clk_freq_MHz
 
         intdict = {}
 
@@ -325,6 +337,7 @@ class Experiment:
         self._machine_code = np.array( fc.dict2bin(self._seq,
                                              self.gradb.bin_config['initial_bufs'],
                                              self.gradb.bin_config['latencies'], # TODO: can add extra manipulation here, e.g. add to another array etc
+                                             hardware_config=self.hardware_config,
                                              ), dtype=np.uint32 )
 
         self._seq_compiled = True
@@ -340,6 +353,7 @@ class Experiment:
             intd = self._seq
 
         flodict = {}
+        fpga_clk_freq_MHz = self.hardware_config.fpga_clk_freq_MHz
 
         def convert_t(t_bin, y):
             # add a zero event in the beginning, and shift the times to the 'user frame'
@@ -472,10 +486,13 @@ class Experiment:
         if not only_if_sim or sc.command({'are_you_real':0}, self._s)[0][4]['are_you_real'] == "simulation":
             sc.send_packet(sc.construct_packet({}, 0, command=sc.close_server_pkt), self._s)
 
-def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False):
+def test_rx_scaling(lo_freq=0.5, rf_amp=0.5, rf_steps=True, rx_time=50, rx_periods=[600], rx_padding=20, plot_rx=False, hardware_config=None):
+    hardware_config = _resolve_hardware_config(hardware_config)
+    fpga_clk_freq_MHz = hardware_config.fpga_clk_freq_MHz
 
     expt = Experiment(lo_freq=lo_freq, rx_t=rx_periods[0] / fpga_clk_freq_MHz,
-                      fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True)
+                      fix_cic_scale=False, set_cic_shift=False, allow_user_init_cfg=True, flush_old_rx=True,
+                      hardware_config=hardware_config)
     tr_t = 0
     tr_period = rx_time + rx_padding
     rx_lengths = []
