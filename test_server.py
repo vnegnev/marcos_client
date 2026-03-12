@@ -11,15 +11,17 @@ import warnings
 import pdb
 st = pdb.set_trace
 
-from local_config import ip_address, port, fpga_clk_freq_MHz, grad_board
+from hardware_config import HardwareConfig
 from server_comms import *
+
+hardware_config = HardwareConfig()
 
 class ServerTest(unittest.TestCase):
     # @classmethod
     # def setUpClass(cls):
     def setUp(self):
         self.s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.s.connect((ip_address, port))
+        self.s.connect((hardware_config.ip_address, hardware_config.port))
         self.packet_idx = 0
 
     def tearDown(self):
@@ -254,7 +256,7 @@ class ServerTest(unittest.TestCase):
                                       ]}
                           ])
 
-    @unittest.skipUnless(grad_board == "gpa-fhdo", "requires GPA-FHDO board")
+    @unittest.skipUnless(hardware_config.grad_board == "gpa-fhdo", "requires GPA-FHDO board")
     def test_grad_adc(self):
         print_adc_reads = False
         # initialise SPI
@@ -417,7 +419,7 @@ def test_client(s):
 
 def main_test():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((ip_address, port))
+        s.connect((hardware_config.ip_address, hardware_config.port))
         # throughput_test(s)
         test_client(s)
         # shutdown_server(s)

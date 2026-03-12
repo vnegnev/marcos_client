@@ -10,6 +10,7 @@ import server_comms as sc
 
 import marcompile as mc
 import experiment as exp
+from hardware_config import HardwareConfig
 
 import pdb
 st = pdb.set_trace
@@ -63,19 +64,18 @@ oc1_config = {
 
 gb_orig = None
 gb_changed = False
+test_hardware_config = HardwareConfig(grad_board="gpa-fhdo")
 
 def set_grad_board(gb):
     global gb_orig, gb_changed
     if not gb_changed:
-        gb_orig = mc.grad_board
-    mc.grad_board = gb
-    exp.grad_board = gb
+        gb_orig = test_hardware_config.grad_board
+    test_hardware_config.grad_board = gb
     gb_changed = True
 
 def restore_grad_board():
     global gb_orig, gb_changed
-    mc.grad_board = gb_orig
-    exp.grad_board = gb_orig
+    test_hardware_config.grad_board = gb_orig
     gb_changed = False
 
 def compare_csv(fname, sock, proc,
@@ -86,7 +86,8 @@ def compare_csv(fname, sock, proc,
 
     source_csv = os.path.join("csvs", fname + ".csv")
     lc = mc.csv2bin(source_csv,
-                    quick_start=False, initial_bufs=initial_bufs, latencies=latencies)
+                    quick_start=False, initial_bufs=initial_bufs, latencies=latencies,
+                    hardware_config=test_hardware_config)
     data = np.array(lc, dtype=np.uint32)
 
     # run simulation
@@ -120,7 +121,8 @@ def compare_dict(source_dict, ref_fname, sock, proc,
                  ignore_start_delay=True
                  ):
 
-    lc = mc.dict2bin(source_dict, initial_bufs=initial_bufs, latencies=latencies)
+    lc = mc.dict2bin(source_dict, initial_bufs=initial_bufs, latencies=latencies,
+                     hardware_config=test_hardware_config)
     data = np.array(lc, dtype=np.uint32)
 
     # run simulation
@@ -172,6 +174,9 @@ def compare_expt_dict(source_dict, ref_fname, sock, proc,
     and latencies are supplied to the Experiment class from the
     classes in grad_board.py.
     """
+
+    if "hardware_config" not in kwargs:
+        kwargs["hardware_config"] = test_hardware_config
 
     e = exp.Experiment(prev_socket=sock, seq_dict=source_dict, **kwargs)
 

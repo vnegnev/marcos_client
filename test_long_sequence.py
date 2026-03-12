@@ -14,7 +14,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import experiment as ex
-from local_config import grad_board
 
 import pdb
 st = pdb.set_trace
@@ -31,9 +30,9 @@ rf_start_delay = 100 # us
 rf_amp = 0.4
 rf_length = 200 # us
 
-def long_loopback(rf_interval=1000000, trs=20):
+def long_loopback(rf_interval=1000000, trs=20, hardware_config=None):
 
-    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, halt_and_reset=True)
+    expt = ex.Experiment(lo_freq=lo_freq, rx_t=rx_period, halt_and_reset=True, hardware_config=hardware_config)
 
     for k in range(trs):
         rf_t = rf_start_delay + k*rf_interval + np.array([0, rf_length])

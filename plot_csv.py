@@ -4,8 +4,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys, pdb
-from local_config import fpga_clk_freq_MHz
+from hardware_config import HardwareConfig
 st = pdb.set_trace
+
+hardware_config = HardwareConfig()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -24,7 +26,7 @@ if __name__ == "__main__":
     data = np.loadtxt(sys.argv[1], skiprows=2, delimiter=',')
     data[1:, 0] = data[1:, 0] - data[1, 0] + 1 # remove dead time in the beginning taken up by simulated memory writes
 
-    time_us = data[:,0]/fpga_clk_freq_MHz
+    time_us = data[:,0]/hardware_config.fpga_clk_freq_MHz
     tx = data[:,1:5].astype(np.int16) / 32768
     # offset binary
     fhdo = data[:,5:9].astype(np.uint16) / 32768 - 1
