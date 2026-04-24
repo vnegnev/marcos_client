@@ -3,7 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import experiment as ex
-from local_config import grad_board
+from hardware_config import HardwareConfig
 
 import pdb
 st = pdb.set_trace
@@ -23,7 +23,7 @@ def test_jitter(
         loops=10,
         print_loops=False,
         plot_sequence=False,
-        experiment_kwargs={}):
+        experiment_kwargs=None):
     """Two successive pulses, with an adjustable interval between them.
 
     Trigger an oscilloscope from the TX gate or first pulse, and look
@@ -44,7 +44,11 @@ def test_jitter(
         np.array([grad_amp, 0, grad_amp, 0])
     )
 
-    gpa_fhdo_offset_time = 10 if grad_board == "gpa-fhdo" else 0
+    if experiment_kwargs is None:
+        experiment_kwargs = {}
+
+    hardware_config = experiment_kwargs.get("hardware_config", HardwareConfig())
+    gpa_fhdo_offset_time = 10 if hardware_config.grad_board == "gpa-fhdo" else 0
 
     event_dict = {'tx0': rf_data,
                   'tx1': rf_data,
